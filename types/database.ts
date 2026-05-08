@@ -75,7 +75,16 @@ export type Database = {
         ];
       };
     };
-    Views: { [_ in never]: never };
+    Views: {
+      bid_source_counts: {
+        Row: {
+          source: string;
+          total: number;
+          today: number;
+        };
+        Relationships: [];
+      };
+    };
     Functions: { [_ in never]: never };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };

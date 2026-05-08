@@ -27,16 +27,11 @@ export interface BidKpiSummary {
 
 export async function getBidKpis(): Promise<BidKpiSummary> {
   const supabase = await createClient();
-  const todayStartIso = startOfDayKstIso();
 
-  const [todayRows, totalRows, lastRow] = await Promise.all([
-    supabase
-      .from("bid_announcements")
-      .select("source")
-      .gte("created_at", todayStartIso),
-    supabase
-      .from("bid_announcements")
-      .select("source"),
+  // 1) source 별 누적/오늘 카운트 — Postgres view 가 사전 집계
+  //    (Supabase JS 의 1000 row select 제한 우회).
+  const [countsRes, lastRow] = await Promise.all([
+    supabase.from("bid_source_counts").select("*"),
     supabase
       .from("bid_announcements")
       .select("created_at")
@@ -45,18 +40,28 @@ export async function getBidKpis(): Promise<BidKpiSummary> {
       .maybeSingle(),
   ]);
 
-  const todayMap = countBySource(todayRows.data as { source: string }[] | null);
-  const totalMap = countBySource(totalRows.data as { source: string }[] | null);
+  const counts =
+    (countsRes.data as { source: string; total: number; today: number }[] | null) ?? [];
 
-  const byGroup: BidKpiBreakdown[] = SOURCE_GROUP_ORDER.map((g) => ({
-    group: g,
-    today: sumForSources(todayMap, SOURCE_GROUPS[g]),
-    total: sumForSources(totalMap, SOURCE_GROUPS[g]),
-  }));
+  // source → {total, today}
+  const byKey = new Map<string, { total: number; today: number }>();
+  for (const r of counts) byKey.set(r.source, { total: Number(r.total), today: Number(r.today) });
 
-  let totalSum = 0;
-  for (const v of totalMap.values()) totalSum += v;
-  const todaySum = todayRows.data?.length ?? 0;
+  const byGroup: BidKpiBreakdown[] = SOURCE_GROUP_ORDER.map((g) => {
+    let total = 0, today = 0;
+    for (const s of SOURCE_GROUPS[g]) {
+      const v = byKey.get(s);
+      if (v) { total += v.total; today += v.today; }
+    }
+    return { group: g, total, today };
+  });
+
+  // 전체 합계
+  let totalSum = 0, todaySum = 0;
+  for (const v of byKey.values()) {
+    totalSum += v.total;
+    todaySum += v.today;
+  }
 
   return {
     todayTotal: todaySum,
@@ -64,19 +69,6 @@ export async function getBidKpis(): Promise<BidKpiSummary> {
     byGroup,
     lastCollectedAt: (lastRow.data as { created_at: string } | null)?.created_at ?? null,
   };
-}
-
-function countBySource(rows: { source: string }[] | null) {
-  const m = new Map<string, number>();
-  if (!rows) return m;
-  for (const r of rows) m.set(r.source, (m.get(r.source) ?? 0) + 1);
-  return m;
-}
-
-function sumForSources(m: Map<string, number>, sources: readonly string[]) {
-  let n = 0;
-  for (const s of sources) n += m.get(s) ?? 0;
-  return n;
 }
 
 // ───────────────────── List + Filter ─────────────────────

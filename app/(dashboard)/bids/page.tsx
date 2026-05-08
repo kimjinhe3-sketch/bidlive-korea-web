@@ -2,7 +2,7 @@ import { getBidKpis, getBidList } from "@/lib/queries/bids";
 import { BidKpiGrid } from "@/components/bids/bid-kpi-grid";
 import { BidSourceTabs } from "@/components/bids/bid-source-tabs";
 import { BidTable } from "@/components/bids/bid-table";
-import { BidFilterPanel } from "@/components/bids/bid-filter-panel";
+import { BidFilterToolbar } from "@/components/bids/bid-filter-toolbar";
 import { BidCollectButton } from "@/components/bids/bid-collect-button";
 import { BidExportButton } from "@/components/bids/bid-export-button";
 import { SOURCE_GROUPS, type SourceGroup, type Sido } from "@/types/domain";
@@ -72,20 +72,19 @@ export default async function BidsPage({ searchParams }: PageProps) {
       {/* 2. KPI — TODAY 거대 + 4 그룹 누적 */}
       <BidKpiGrid kpis={kpis} />
 
-      {/* 3. 필터 패널 + 메인 (좌 280 / 우 나머지) */}
-      <div className="flex gap-4 items-start">
-        <BidFilterPanel />
+      {/* 3. 필터 툴바 — 표 위 한 줄 */}
+      <BidFilterToolbar />
 
-        <section className="flex-1 min-w-0 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <BidSourceTabs />
-            <span className="text-xs font-medium text-kt-dark-gray">
-              결과 <span className="font-bold text-kt-black num">{rows.length.toLocaleString("ko-KR")}</span>건
-            </span>
-          </div>
-          <BidTable rows={rows} />
-        </section>
-      </div>
+      {/* 4. 소스 segment + 결과 카운트 + 테이블 */}
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <BidSourceTabs />
+          <span className="text-xs font-medium text-kt-dark-gray">
+            결과 <span className="font-bold text-kt-black num">{rows.length.toLocaleString("ko-KR")}</span>건
+          </span>
+        </div>
+        <BidTable rows={rows} />
+      </section>
     </div>
   );
 }
