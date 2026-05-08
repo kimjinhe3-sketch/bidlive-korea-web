@@ -1,0 +1,87 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ================================================================
+ *  KT Engineering CRM — 디자인 토큰 (HSL 변환값)
+ *  - 프라이머리: KT RED #FE2E36 → HSL(358, 99%, 59%)
+ *  - 사이드바·헤딩 텍스트: KT BLACK #000000
+ *  - 본문 텍스트: KT DARK GRAY #4C4C4E → HSL(240, 1%, 30%)
+ *  - 비활성·구분선: KT LIGHT GRAY #A2A4A3
+ *  - 배경: white / muted slate-50
+ *
+ *  HSL 형식을 사용하는 이유: shadcn/ui 패턴에 맞추고,
+ *  CSS color-mix() 또는 알파 합성을 토큰만으로 가능하게 한다.
+ * ================================================================ */
+
+@layer base {
+  :root {
+    /* 표면 */
+    --background: 0 0% 100%;            /* white */
+    --foreground: 240 1% 18%;           /* near-black 본문 */
+
+    --card: 0 0% 100%;
+    --card-foreground: 240 1% 18%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 1% 18%;
+
+    /* 프라이머리 = KT RED */
+    --primary: 358 99% 59%;             /* #FE2E36 */
+    --primary-foreground: 0 0% 100%;
+
+    /* 보조: KT 라이트 그레이 계열 */
+    --secondary: 240 0% 96%;            /* near light-gray surface */
+    --secondary-foreground: 240 1% 18%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 240 1% 46%;     /* dark-gray 보조 */
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 240 1% 18%;
+
+    /* 위험·실주: KT RED 강조 */
+    --destructive: 358 99% 59%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* 보더·인풋: light-gray 기반 */
+    --border: 0 0% 89%;                 /* near light-gray */
+    --input: 0 0% 89%;
+
+    /* focus ring = KT RED */
+    --ring: 358 99% 59%;
+
+    --radius: 0.5rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    /* KT Flow는 라틴 위주로 디자인되어 한글은 약간 작아 보일 수 있어 보정 */
+    text-size-adjust: 100%;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1,
+      "ss01" 1; /* KT Flow 스타일 세트 (제공 시 활성) */
+  }
+
+  /* 헤딩은 KT Flow 우선 — 한글 헤딩도 가독성 위해 weight 보강 */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-kt;
+    letter-spacing: -0.01em;
+  }
+
+  /* 숫자 표기 (대시보드 수치 등) — KT Flow tabular */
+  .num {
+    font-feature-settings: "tnum" 1;
+    font-variant-numeric: tabular-nums;
+  }
+}
