@@ -51,6 +51,11 @@ export default async function BidsPage({ searchParams }: PageProps) {
     getBidList(filter, 1500),
   ]);
 
+  // KPI 카드 클릭 → 오늘 공고 리스트 (open_date = 오늘) 로 이동할 때 사용
+  const todayKst = new Date(new Date().getTime() + 9 * 3600 * 1000)
+    .toISOString()
+    .slice(0, 10);
+
   return (
     <div className="space-y-5">
       {/* 1. 페이지 헤더 + 액션 */}
@@ -69,8 +74,8 @@ export default async function BidsPage({ searchParams }: PageProps) {
         </div>
       </div>
 
-      {/* 2. KPI — TODAY 거대 + 4 그룹 누적 */}
-      <BidKpiGrid kpis={kpis} />
+      {/* 2. KPI — TODAY 거대 + 4 그룹 누적 (클릭 → 필터 리스트) */}
+      <BidKpiGrid kpis={kpis} today={todayKst} />
 
       {/* 3. 필터 툴바 — 표 위 한 줄 */}
       <BidFilterToolbar />
