@@ -3,18 +3,16 @@
 import Link from "next/link";
 import { useSearchParams, usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import type { SourceGroup } from "@/types/domain";
+import { SOURCE_GROUP_ORDER } from "@/types/domain";
 
-const TABS: { value: SourceGroup | "all"; label: string }[] = [
-  { value: "all",       label: "전체" },
-  { value: "나라장터",  label: "나라장터" },
-  { value: "누리장터",  label: "누리장터" },
-  { value: "기타",      label: "LH·KEPCO·기타" },
+const TABS: { value: string; label: string }[] = [
+  { value: "all", label: "전체" },
+  ...SOURCE_GROUP_ORDER.map((g) => ({ value: g, label: g })),
 ];
 
 /**
- * 소스 그룹 segmented control (URL search param 으로 상태 관리).
- * Server-component 친화적 — 클릭 시 URL 변경, 페이지가 RSC 로 다시 그려짐.
+ * 소스 그룹 segmented control (URL 기반).
+ * group 파라미터: "" (전체) | "나라장터" | "LH" | "KEPCO" | "기타"
  */
 export function BidSourceTabs() {
   const params = useSearchParams();
@@ -30,7 +28,7 @@ export function BidSourceTabs() {
   }
 
   return (
-    <div className="inline-flex items-center rounded-md border border-kt-light-gray/40 bg-kt-light-gray/5 p-1 gap-0.5">
+    <div className="inline-flex items-center rounded-md border border-kt-light-gray/40 bg-kt-light-gray/[0.06] p-1 gap-0.5">
       {TABS.map((t) => {
         const active = current === t.value;
         return (

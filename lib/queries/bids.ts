@@ -1,54 +1,42 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
-import { SOURCE_GROUPS, type SourceGroup } from "@/types/domain";
-import type { BidAnnouncement } from "@/types/database";
+import {
+  SOURCE_GROUPS,
+  SOURCE_GROUP_ORDER,
+  extractSido,
+  type SourceGroup,
+  type Sido,
+} from "@/types/domain";
+import type { BidAnnouncement, BidAssignee } from "@/types/database";
+
+// ───────────────────── KPI ─────────────────────
 
 export interface BidKpiBreakdown {
   group: SourceGroup;
   today: number;
-  week: number;
   total: number;
 }
 
 export interface BidKpiSummary {
-  today: number;
-  week: number;
+  todayTotal: number;
   total: number;
   byGroup: BidKpiBreakdown[];
-  /** 마지막 created_at (가장 최근 적재 시각) */
   lastCollectedAt: string | null;
 }
 
-/**
- * 핵심 KPI 한 번에 계산.
- * - 오늘 (KST 기준 자정~)
- * - 이번주 (지난 7일)
- * - 누적 (전체)
- * - 그룹별 분포 (today/week/total)
- */
 export async function getBidKpis(): Promise<BidKpiSummary> {
   const supabase = await createClient();
-
   const todayStartIso = startOfDayKstIso();
-  const weekStartIso = nDaysAgoIso(7);
 
-  // 한 번의 쿼리로 source 별 카운트 가져옴 (today / week / total 각각)
-  // Supabase 는 group by 를 직접 제공하지 않으므로 source 별로 head:true count
-  // 가 가장 효율적이지만 source 가 ~20개라 raw select 후 클라 측 집계가 더 빠름.
-
-  const [todayRows, weekRows, totalRows, lastRow] = await Promise.all([
+  const [todayRows, totalRows, lastRow] = await Promise.all([
     supabase
       .from("bid_announcements")
-      .select("source", { count: "exact" })
+      .select("source")
       .gte("created_at", todayStartIso),
     supabase
       .from("bid_announcements")
-      .select("source", { count: "exact" })
-      .gte("created_at", weekStartIso),
-    supabase
-      .from("bid_announcements")
-      .select("source", { count: "exact" }),
+      .select("source"),
     supabase
       .from("bid_announcements")
       .select("created_at")
@@ -57,65 +45,67 @@ export async function getBidKpis(): Promise<BidKpiSummary> {
       .maybeSingle(),
   ]);
 
-  const todayBySource = countBySourceFromRows(todayRows.data as { source: string }[] | null);
-  const weekBySource = countBySourceFromRows(weekRows.data as { source: string }[] | null);
-  const totalBySource = countBySourceFromRows(totalRows.data as { source: string }[] | null);
-  const lastCreatedAt = (lastRow.data as { created_at: string } | null)?.created_at ?? null;
+  const todayMap = countBySource(todayRows.data as { source: string }[] | null);
+  const totalMap = countBySource(totalRows.data as { source: string }[] | null);
 
-  const groups: SourceGroup[] = ["나라장터", "누리장터", "기타"];
-  const byGroup: BidKpiBreakdown[] = groups.map((g) => {
-    const sources = SOURCE_GROUPS[g];
-    return {
-      group: g,
-      today: sumForSources(todayBySource, sources),
-      week: sumForSources(weekBySource, sources),
-      total: sumForSources(totalBySource, sources),
-    };
-  });
+  const byGroup: BidKpiBreakdown[] = SOURCE_GROUP_ORDER.map((g) => ({
+    group: g,
+    today: sumForSources(todayMap, SOURCE_GROUPS[g]),
+    total: sumForSources(totalMap, SOURCE_GROUPS[g]),
+  }));
+
+  let totalSum = 0;
+  for (const v of totalMap.values()) totalSum += v;
+  const todaySum = todayRows.data?.length ?? 0;
 
   return {
-    today: todayRows.count ?? 0,
-    week: weekRows.count ?? 0,
-    total: totalRows.count ?? 0,
+    todayTotal: todaySum,
+    total: totalSum,
     byGroup,
-    lastCollectedAt: lastCreatedAt,
+    lastCollectedAt: (lastRow.data as { created_at: string } | null)?.created_at ?? null,
   };
 }
 
-function countBySourceFromRows(rows: { source: string }[] | null) {
+function countBySource(rows: { source: string }[] | null) {
   const m = new Map<string, number>();
   if (!rows) return m;
   for (const r of rows) m.set(r.source, (m.get(r.source) ?? 0) + 1);
   return m;
 }
 
-function sumForSources(byMap: Map<string, number>, sources: readonly string[]) {
+function sumForSources(m: Map<string, number>, sources: readonly string[]) {
   let n = 0;
-  for (const s of sources) n += byMap.get(s) ?? 0;
+  for (const s of sources) n += m.get(s) ?? 0;
   return n;
 }
+
+// ───────────────────── List + Filter ─────────────────────
 
 export interface BidListFilter {
   groups?: SourceGroup[];
   bidTypes?: string[];
   keyword?: string;
   orgKeyword?: string;
-  region?: string[];
+  regions?: (Sido | "전국/기타")[];
   amountMinEok?: number;
   amountMaxEok?: number;
+  amountUnbounded?: boolean;
   activeOnly?: boolean;
+  closingWithinDays?: number;     // D-n 임계 (1~14)
   dateFrom?: string;
   dateTo?: string;
+  includeKeywords?: string[];     // 제목에 하나라도 있으면 통과
+  excludeKeywords?: string[];     // 제목에 하나라도 있으면 제외
 }
 
-/**
- * 페이지의 메인 리스트.
- * Supabase 쿼리는 server-side 필터링, 추가 정제 (region 등) 는 메모리.
- */
+export interface BidWithAssignees extends BidAnnouncement {
+  assignees: BidAssignee[];
+}
+
 export async function getBidList(
   filter: BidListFilter = {},
   limit: number = 1000,
-): Promise<BidAnnouncement[]> {
+): Promise<BidWithAssignees[]> {
   const supabase = await createClient();
 
   const sources = filter.groups?.length
@@ -137,95 +127,110 @@ export async function getBidList(
 
   const { data, error } = await q;
   if (error) {
-    console.error("[bids:getBidList]", error);
+    console.error("[bids:getBidList]", JSON.stringify(error, null, 2));
     return [];
   }
   let rows = (data ?? []) as BidAnnouncement[];
 
-  // 진행중 (마감일 ≥ 오늘)
+  // ── Python-side 필터 (Supabase WHERE 로 표현 어려운 것) ──
+  const today = new Date();
+
   if (filter.activeOnly) {
-    const today = new Date().toISOString().slice(0, 10);
-    rows = rows.filter((r) => !r.close_date || r.close_date.slice(0, 10) >= today);
+    const todayIso = today.toISOString().slice(0, 10);
+    rows = rows.filter((r) => !r.close_date || r.close_date.slice(0, 10) >= todayIso);
   }
 
-  // 금액 (억 단위) — server-side 어렵게 가능하지만 클라가 더 단순
+  if (filter.closingWithinDays != null && filter.closingWithinDays > 0) {
+    const limit = filter.closingWithinDays;
+    rows = rows.filter((r) => {
+      if (!r.close_date) return false;
+      const close = new Date(r.close_date.slice(0, 10));
+      const diff = Math.round((close.getTime() - todayMidnight(today)) / 86400000);
+      return diff >= 0 && diff <= limit;
+    });
+  }
+
   if (filter.amountMinEok != null && filter.amountMinEok > 0) {
     const min = filter.amountMinEok * 1e8;
     rows = rows.filter((r) => (r.estimated_price ?? 0) >= min);
   }
-  if (filter.amountMaxEok != null && filter.amountMaxEok < 9999) {
+  if (!filter.amountUnbounded && filter.amountMaxEok != null && filter.amountMaxEok < 9999) {
     const max = filter.amountMaxEok * 1e8;
     rows = rows.filter((r) => (r.estimated_price ?? Number.POSITIVE_INFINITY) <= max);
   }
 
-  return rows;
+  if (filter.regions?.length) {
+    const set = new Set(filter.regions);
+    rows = rows.filter((r) => set.has(extractSido(r.org_name)));
+  }
+
+  if (filter.includeKeywords?.length) {
+    const kws = filter.includeKeywords.map((k) => k.toLowerCase());
+    rows = rows.filter((r) =>
+      kws.some((k) => (r.title ?? "").toLowerCase().includes(k))
+    );
+  }
+  if (filter.excludeKeywords?.length) {
+    const kws = filter.excludeKeywords.map((k) => k.toLowerCase());
+    rows = rows.filter((r) =>
+      !kws.some((k) => (r.title ?? "").toLowerCase().includes(k))
+    );
+  }
+
+  // ── assignees join (별도 쿼리 — 작은 N) ──
+  const ids = rows.map((r) => r.id);
+  let assigneesByBid = new Map<number, BidAssignee[]>();
+  if (ids.length > 0) {
+    const { data: aData, error: aError } = await supabase
+      .from("bid_assignees")
+      .select("*")
+      .in("bid_id", ids);
+    if (aError) {
+      // 테이블 없으면 무시 (사용자가 SQL 미적용)
+      console.warn("[bids:getBidList] assignees skip:", aError.message);
+    } else {
+      const arr = (aData ?? []) as BidAssignee[];
+      for (const a of arr) {
+        const list = assigneesByBid.get(a.bid_id) ?? [];
+        list.push(a);
+        assigneesByBid.set(a.bid_id, list);
+      }
+    }
+  }
+
+  return rows.map((r) => ({ ...r, assignees: assigneesByBid.get(r.id) ?? [] }));
 }
 
-/** 일별 수집 추이 (최근 N일) — 차트용 */
-export async function getDailyTrend(days: number = 14): Promise<{ date: string; n: number }[]> {
-  const supabase = await createClient();
-  const fromIso = nDaysAgoIso(days);
-
-  const { data, error } = await supabase
-    .from("bid_announcements")
-    .select("created_at")
-    .gte("created_at", fromIso);
-
-  if (error || !data) {
-    console.error("[bids:getDailyTrend]", error);
-    return [];
-  }
-
-  const byDate = new Map<string, number>();
-  const typedData = data as { created_at: string }[];
-  for (const r of typedData) {
-    const d = r.created_at.slice(0, 10);
-    byDate.set(d, (byDate.get(d) ?? 0) + 1);
-  }
-
-  // 빈 날짜도 0 으로 채워서 반환
-  const result: { date: string; n: number }[] = [];
-  const start = new Date();
-  start.setUTCHours(0, 0, 0, 0);
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(start);
-    d.setUTCDate(d.getUTCDate() - i);
-    const iso = d.toISOString().slice(0, 10);
-    result.push({ date: iso, n: byDate.get(iso) ?? 0 });
-  }
-  return result;
-}
-
-// ───────────────────────── helpers ─────────────────────────
+// ───────────────────── helpers ─────────────────────
 
 function startOfDayKstIso(): string {
   const now = new Date();
-  // KST = UTC+9
-  const kstNow = new Date(now.getTime() + 9 * 3600 * 1000);
-  kstNow.setUTCHours(0, 0, 0, 0);
-  return new Date(kstNow.getTime() - 9 * 3600 * 1000).toISOString();
+  const kst = new Date(now.getTime() + 9 * 3600 * 1000);
+  kst.setUTCHours(0, 0, 0, 0);
+  return new Date(kst.getTime() - 9 * 3600 * 1000).toISOString();
 }
 
-function nDaysAgoIso(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.toISOString();
+function todayMidnight(today: Date) {
+  const d = new Date(today);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
 }
 
-/**
- * D-day 라벨 ("D-day", "D-1", ..., "D-7", null = 7일 초과 또는 마감 지남).
- *
- * "마감" = 이미 마감일 지남.
- */
-export function dDayLabel(closeDate: string | null, today: Date = new Date()): string | null {
-  if (!closeDate) return null;
-  const close = new Date(closeDate.slice(0, 10));
-  const todayMidnight = new Date(today);
-  todayMidnight.setHours(0, 0, 0, 0);
-  const diffMs = close.getTime() - todayMidnight.getTime();
-  const diff = Math.round(diffMs / (1000 * 60 * 60 * 24));
-  if (diff < 0) return "마감";
-  if (diff === 0) return "D-day";
-  if (diff <= 7) return `D-${diff}`;
-  return null;
+// dDayLabel 은 client 에서도 사용 가능하도록 types/domain.ts 로 이동.
+// 마감임박 카운트 (KPI 보조용 — 향후 사용)
+export async function getClosingSoonCount(within: number = 2): Promise<number> {
+  const supabase = await createClient();
+  const today = new Date();
+  const limit = new Date(today);
+  limit.setDate(limit.getDate() + within);
+  const todayIso = today.toISOString().slice(0, 10);
+  const limitIso = limit.toISOString().slice(0, 10);
+
+  const { count, error } = await supabase
+    .from("bid_announcements")
+    .select("*", { count: "exact", head: true })
+    .gte("close_date", todayIso)
+    .lte("close_date", limitIso);
+  if (error) return 0;
+  return count ?? 0;
 }

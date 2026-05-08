@@ -39,6 +39,19 @@ export type BidAnnouncementInsert = Omit<BidAnnouncement, "id" | "created_at" | 
 
 export type BidAnnouncementUpdate = Partial<BidAnnouncementInsert>;
 
+export interface BidAssignee {
+  id: number;
+  bid_id: number;
+  rep_name: string;
+  note: string | null;
+  assigned_at: string;
+}
+export type BidAssigneeInsert = Omit<BidAssignee, "id" | "assigned_at"> & {
+  id?: number;
+  assigned_at?: string;
+};
+export type BidAssigneeUpdate = Partial<BidAssigneeInsert>;
+
 export type Database = {
   public: {
     Tables: {
@@ -47,6 +60,19 @@ export type Database = {
         Insert: BidAnnouncementInsert;
         Update: BidAnnouncementUpdate;
         Relationships: [];
+      };
+      bid_assignees: {
+        Row: BidAssignee;
+        Insert: BidAssigneeInsert;
+        Update: BidAssigneeUpdate;
+        Relationships: [
+          {
+            foreignKeyName: "bid_assignees_bid_id_fkey";
+            columns: ["bid_id"];
+            referencedRelation: "bid_announcements";
+            referencedColumns: ["id"];
+          },
+        ];
       };
     };
     Views: { [_ in never]: never };

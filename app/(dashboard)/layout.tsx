@@ -24,7 +24,7 @@ export default async function DashboardLayout({
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0">
         <Header lastCollectedAt={lastCollectedAt} />
-        <main className="flex-1 px-4 lg:px-8 py-6 lg:py-8 max-w-[1480px] w-full mx-auto">
+        <main className="flex-1 px-4 lg:px-6 py-5 lg:py-6 max-w-[1880px] w-full mx-auto">
           {children}
         </main>
         <BottomNav />

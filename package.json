@@ -5,6 +5,7 @@
   "description": "BIDLIVE Korea — 국내 입찰공고 대시보드 (KT Engineering 디자인 시스템)",
   "scripts": {
     "dev": "next dev",
+    "dev:insecure": "cross-env NODE_TLS_REJECT_UNAUTHORIZED=0 next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

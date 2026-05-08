@@ -1,105 +1,88 @@
-import { Briefcase, TrendingUp, Building2, Globe2 } from "lucide-react";
+import { Building2, Briefcase, Globe2, Sparkles } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { BidKpiSummary } from "@/lib/queries/bids";
+import type { BidKpiSummary, BidKpiBreakdown } from "@/lib/queries/bids";
+import type { SourceGroup } from "@/types/domain";
 
 /**
- * 입찰 KPI 9-grid (kteng-crm 대시보드 패턴 일치).
- *
- * 행: 오늘 / 이번 주 / 누적
- * 열: 나라장터 / 누리장터 / 기타
- *
- * 마지막 행 (누적) 강조.
+ * KPI 영역 — v2.
+ *  - 좌측: 오늘 자 공고된 입찰 건수 (거대 수치, primary)
+ *  - 우측: 누적 4-그룹 카드 (나라장터 / LH / KEPCO / 기타)
  */
 export function BidKpiGrid({ kpis }: { kpis: BidKpiSummary }) {
   return (
-    <div className="rounded-lg border border-kt-light-gray/40 bg-white overflow-hidden">
-      <div className="grid grid-cols-[110px_1fr_1fr_1fr] border-b border-kt-light-gray/30 bg-kt-light-gray/5">
-        <div />
-        <ColumnHeader icon={Briefcase}  label="나라장터" tone="blue" />
-        <ColumnHeader icon={Building2}  label="누리장터" tone="teal" />
-        <ColumnHeader icon={Globe2}     label="LH·KEPCO·기타" tone="purple" />
+    <div className="grid grid-cols-1 xl:grid-cols-[420px_minmax(0,1fr)] gap-4">
+      <TodayCard count={kpis.todayTotal} total={kpis.total} />
+      <GroupGrid items={kpis.byGroup} />
+    </div>
+  );
+}
+
+function TodayCard({ count, total }: { count: number; total: number }) {
+  return (
+    <div className="relative overflow-hidden rounded-lg border border-kt-light-gray/40 bg-white p-6">
+      <div className="absolute left-0 top-0 bottom-0 w-1 bg-kt-red" />
+      <div className="flex items-center gap-2 text-[11px] font-bold tracking-widest uppercase text-kt-red">
+        <Sparkles className="h-3.5 w-3.5" />
+        Today · 오늘 신규 공고
       </div>
-
-      <KpiRow label="오늘"
-              n={kpis.byGroup[0]?.today ?? 0}
-              n2={kpis.byGroup[1]?.today ?? 0}
-              n3={kpis.byGroup[2]?.today ?? 0} />
-      <KpiRow label="최근 7일"
-              n={kpis.byGroup[0]?.week ?? 0}
-              n2={kpis.byGroup[1]?.week ?? 0}
-              n3={kpis.byGroup[2]?.week ?? 0} />
-      <KpiRow label="누적"
-              n={kpis.byGroup[0]?.total ?? 0}
-              n2={kpis.byGroup[1]?.total ?? 0}
-              n3={kpis.byGroup[2]?.total ?? 0}
-              highlight />
-    </div>
-  );
-}
-
-function ColumnHeader({
-  icon: Icon, label, tone,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  tone: "red" | "teal" | "blue" | "purple";
-}) {
-  const toneClass =
-    tone === "red"    ? "text-kt-red"
-    : tone === "teal" ? "text-kt-teal"
-    : tone === "blue" ? "text-kt-blue"
-    : "text-kt-purple";
-  return (
-    <div className="px-4 py-2 flex items-center gap-1.5 text-xs font-bold text-kt-dark-gray">
-      <Icon className={cn("h-3.5 w-3.5", toneClass)} />
-      {label}
-    </div>
-  );
-}
-
-function KpiRow({
-  label, n, n2, n3, highlight,
-}: {
-  label: string;
-  n: number;
-  n2: number;
-  n3: number;
-  highlight?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "grid grid-cols-[110px_1fr_1fr_1fr] border-b border-kt-light-gray/20 last:border-b-0",
-        highlight && "bg-kt-red/[0.02]",
-      )}
-    >
-      <div className="px-4 py-3 flex items-center border-r border-kt-light-gray/20">
+      <div className="mt-3 flex items-baseline gap-2">
         <span className={cn(
-          "text-xs font-bold tracking-wide",
-          highlight ? "text-kt-red" : "text-kt-dark-gray",
-        )}>
-          {label}
+          "font-black num leading-none tracking-tight",
+          count === 0 ? "text-kt-light-gray" : "text-kt-black",
+        )} style={{ fontSize: "5rem" }}>
+          {count.toLocaleString("ko-KR")}
         </span>
+        <span className="text-2xl font-bold text-kt-dark-gray">건</span>
       </div>
-      <KpiCell n={n} accent="blue" />
-      <KpiCell n={n2} accent="teal" />
-      <KpiCell n={n3} accent="purple" />
+      <div className="mt-3 text-xs text-kt-dark-gray">
+        DB 누적 <span className="font-bold text-kt-black num">{total.toLocaleString("ko-KR")}</span>건
+      </div>
     </div>
   );
 }
 
-function KpiCell({ n, accent }: { n: number; accent: "blue" | "teal" | "purple" | "red" }) {
-  const colorClass =
-    accent === "blue"   ? "text-kt-blue"
-    : accent === "teal" ? "text-kt-teal"
-    : accent === "red"  ? "text-kt-red"
-    : "text-kt-purple";
+function GroupGrid({ items }: { items: BidKpiBreakdown[] }) {
   return (
-    <div className="px-4 py-3 border-r border-kt-light-gray/20 last:border-r-0">
-      <div className={cn("text-2xl font-black num", n === 0 ? "text-kt-light-gray" : colorClass)}>
-        {n.toLocaleString("ko-KR")}
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {items.map((it) => (
+        <GroupCard key={it.group} item={it} />
+      ))}
+    </div>
+  );
+}
+
+const GROUP_META: Record<SourceGroup, { icon: LucideIcon; tone: string }> = {
+  나라장터: { icon: Briefcase,  tone: "text-kt-blue   border-kt-blue/30" },
+  LH:       { icon: Building2,  tone: "text-kt-teal   border-kt-teal/30" },
+  KEPCO:    { icon: Sparkles,   tone: "text-kt-purple border-kt-purple/30" },
+  기타:     { icon: Globe2,     tone: "text-kt-dark-gray border-kt-light-gray/40" },
+};
+
+function GroupCard({ item }: { item: BidKpiBreakdown }) {
+  const meta = GROUP_META[item.group];
+  const Icon = meta.icon;
+  return (
+    <div className="rounded-lg border border-kt-light-gray/40 bg-white p-4 hover:shadow-sm transition-shadow">
+      <div className={cn("flex items-center gap-1.5 text-[11px] font-bold tracking-wider uppercase", meta.tone)}>
+        <Icon className="h-3 w-3" />
+        {item.group}
       </div>
-      <div className="text-[11px] text-kt-light-gray num mt-0.5">건</div>
+      <div className="mt-1.5 flex items-baseline gap-1">
+        <span className={cn(
+          "text-3xl font-black num leading-none tracking-tight",
+          item.total === 0 ? "text-kt-light-gray" : "text-kt-black",
+        )}>
+          {item.total.toLocaleString("ko-KR")}
+        </span>
+        <span className="text-sm font-bold text-kt-dark-gray">건</span>
+      </div>
+      <div className="mt-1.5 text-[11px] text-kt-light-gray">
+        오늘 <span className={cn(
+          "font-bold num",
+          item.today > 0 ? "text-kt-red" : "text-kt-light-gray",
+        )}>+{item.today.toLocaleString("ko-KR")}</span>
+      </div>
     </div>
   );
 }
