@@ -157,7 +157,7 @@ function BidRow({ row }: { row: BidWithAssignees }) {
   const dday = dDayLabel(row.close_date);
   const fresh = isFreshOpen(row.open_date);
   const closing = isClosingSoon(row.close_date);
-  const sido = extractSido(row.org_name);
+  const sido = extractSido(row.org_name, row.region);
 
   return (
     <tr className="border-b border-kt-light-gray/20 hover:bg-kt-light-gray/[0.04] transition-colors">
@@ -195,9 +195,12 @@ function BidRow({ row }: { row: BidWithAssignees }) {
       {/* 기관 */}
       <td className="px-2 py-2 align-top">
         <div className="text-xs text-kt-dark-gray line-clamp-2">{row.org_name ?? "-"}</div>
-        {sido !== "전국/기타" && (
-          <div className="mt-0.5 text-[10px] text-kt-light-gray">{sido}</div>
-        )}
+        <div className="mt-0.5 text-[10px] text-kt-light-gray flex items-center gap-1">
+          {sido !== "전국/기타" && <span className="font-bold text-kt-blue">{sido}</span>}
+          {row.region && row.region !== sido && (
+            <span className="truncate" title={row.region}>· {row.region}</span>
+          )}
+        </div>
       </td>
 
       {/* 업종 */}

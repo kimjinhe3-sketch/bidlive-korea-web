@@ -165,7 +165,7 @@ export async function getBidList(
 
   if (filter.regions?.length) {
     const set = new Set(filter.regions);
-    rows = rows.filter((r) => set.has(extractSido(r.org_name)));
+    rows = rows.filter((r) => set.has(extractSido(r.org_name, r.region)));
   }
 
   if (filter.includeKeywords?.length) {

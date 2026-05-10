@@ -21,6 +21,7 @@ export interface BidAnnouncement {
   bid_no: string;
   title: string;
   org_name: string | null;
+  region: string | null;
   contract_method: string | null;
   estimated_price: number | null;
   open_date: string | null;

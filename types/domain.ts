@@ -64,11 +64,22 @@ export const SIDO_LIST = [
 ] as const;
 export type Sido = (typeof SIDO_LIST)[number];
 
-/** 시·도 추출 — org_name 의 첫 단어가 SIDO 면 그 시·도, 아니면 "전국/기타". */
-export function extractSido(orgName: string | null): Sido | "전국/기타" {
-  if (!orgName) return "전국/기타";
-  for (const s of SIDO_LIST) {
-    if (orgName.includes(s)) return s;
+/** 시·도 추출 — region 컬럼 우선, 없으면 org_name 에서 substring 매치, 그래도 없으면 "전국/기타". */
+export function extractSido(
+  orgName: string | null,
+  region: string | null = null,
+): Sido | "전국/기타" {
+  // 1순위: region 컬럼
+  if (region) {
+    for (const s of SIDO_LIST) {
+      if (region.includes(s)) return s;
+    }
+  }
+  // 2순위: org_name fallback (legacy 데이터)
+  if (orgName) {
+    for (const s of SIDO_LIST) {
+      if (orgName.includes(s)) return s;
+    }
   }
   return "전국/기타";
 }
