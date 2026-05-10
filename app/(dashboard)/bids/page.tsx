@@ -63,9 +63,11 @@ export default async function BidsPage({ searchParams }: PageProps) {
     sortDir,
   };
 
+  // 표시 한도 — 300 으로 제한해서 렌더 부담 ↓ (초과 시 필터로 좁히도록 안내)
+  const LIST_LIMIT = 300;
   const [kpis, rows] = await Promise.all([
     getBidKpis(),
-    getBidList(filter, 1500),
+    getBidList(filter, LIST_LIMIT),
   ]);
 
   // KPI 카드 클릭 → 오늘 공고 리스트 (open_date = 오늘) 로 이동할 때 사용
@@ -103,6 +105,9 @@ export default async function BidsPage({ searchParams }: PageProps) {
           <BidSourceTabs />
           <span className="text-xs font-medium text-kt-dark-gray">
             결과 <span className="font-bold text-kt-black num">{rows.length.toLocaleString("ko-KR")}</span>건
+            {rows.length === LIST_LIMIT && (
+              <span className="ml-1 text-[11px] text-kt-red">(최대 {LIST_LIMIT}건 — 필터로 좁히세요)</span>
+            )}
           </span>
         </div>
         <BidTable

@@ -49,7 +49,8 @@ export function BidTable({
               <ThStatic className="w-[88px]">{ATTENTION_LABEL}</ThStatic>
               <ThSortable col="close_date" label="D-day" sort={sort} dir={dir} sp={searchParams} className="w-[88px]" />
               <ThSortable col="title"      label="제목"  sort={sort} dir={dir} sp={searchParams} className="min-w-[260px]" align="left" />
-              <ThSortable col="org_name"   label="기관"  sort={sort} dir={dir} sp={searchParams} className="w-[200px]"     align="left" />
+              <ThSortable col="org_name"   label="기관"  sort={sort} dir={dir} sp={searchParams} className="w-[180px]"     align="left" />
+              <ThStatic className="w-[80px]">지역</ThStatic>
               <ThSortable col="bid_type"   label="업종"  sort={sort} dir={dir} sp={searchParams} className="w-[64px]" />
               <ThSortable col="estimated_price" label="금액" sort={sort} dir={dir} sp={searchParams} className="w-[88px]" align="right" />
               <ThSortable col="close_date" label="마감일" sort={sort} dir={dir} sp={searchParams} className="w-[100px]" />
@@ -195,12 +196,21 @@ function BidRow({ row }: { row: BidWithAssignees }) {
       {/* 기관 */}
       <td className="px-2 py-2 align-top">
         <div className="text-xs text-kt-dark-gray line-clamp-2">{row.org_name ?? "-"}</div>
-        <div className="mt-0.5 text-[10px] text-kt-light-gray flex items-center gap-1">
-          {sido !== "전국/기타" && <span className="font-bold text-kt-blue">{sido}</span>}
-          {row.region && row.region !== sido && (
-            <span className="truncate" title={row.region}>· {row.region}</span>
-          )}
-        </div>
+      </td>
+
+      {/* 지역 */}
+      <td className="px-2 py-2 align-top text-center">
+        {sido !== "전국/기타" ? (
+          <span className="inline-flex items-center justify-center rounded border border-kt-blue/25 bg-kt-blue/[0.08] px-1.5 py-0.5 text-[11px] font-bold text-kt-blue whitespace-nowrap">
+            {sido}
+          </span>
+        ) : row.region ? (
+          <span className="text-[11px] text-kt-dark-gray truncate inline-block max-w-full" title={row.region}>
+            {row.region}
+          </span>
+        ) : (
+          <span className="text-[11px] text-kt-light-gray">-</span>
+        )}
       </td>
 
       {/* 업종 */}
