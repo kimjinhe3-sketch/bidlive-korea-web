@@ -63,8 +63,8 @@ export default async function BidsPage({ searchParams }: PageProps) {
     sortDir,
   };
 
-  // 표시 한도 — 300 으로 제한해서 렌더 부담 ↓ (초과 시 필터로 좁히도록 안내)
-  const LIST_LIMIT = 300;
+  // cleanup (close_date 7일 지나면 자동 삭제) 으로 활성 row 줄어듦 → limit 풀어도 OK
+  const LIST_LIMIT = 1500;
   const [kpis, rows] = await Promise.all([
     getBidKpis(),
     getBidList(filter, LIST_LIMIT),

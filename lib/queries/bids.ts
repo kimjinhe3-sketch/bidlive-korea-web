@@ -129,6 +129,29 @@ export async function getBidList(
   if (filter.dateFrom) q = q.gte("open_date", filter.dateFrom);
   if (filter.dateTo) q = q.lte("open_date", filter.dateTo);
 
+  // 활성 공고만 — server-side push (close_date NULL 이거나 오늘 이상)
+  if (filter.activeOnly) {
+    const today = new Date().toISOString().slice(0, 10);
+    q = q.or(`close_date.is.null,close_date.gte.${today}`);
+  }
+
+  // D-n 임박 — server-side
+  if (filter.closingWithinDays != null && filter.closingWithinDays > 0) {
+    const today = new Date();
+    const limit = new Date(today);
+    limit.setDate(limit.getDate() + filter.closingWithinDays);
+    q = q.gte("close_date", today.toISOString().slice(0, 10))
+         .lte("close_date", limit.toISOString().slice(0, 10));
+  }
+
+  // 금액 — server-side
+  if (filter.amountMinEok != null && filter.amountMinEok > 0) {
+    q = q.gte("estimated_price", filter.amountMinEok * 1e8);
+  }
+  if (!filter.amountUnbounded && filter.amountMaxEok != null && filter.amountMaxEok < 9999) {
+    q = q.lte("estimated_price", filter.amountMaxEok * 1e8);
+  }
+
   const { data, error } = await q;
   if (error) {
     console.error("[bids:getBidList]", JSON.stringify(error, null, 2));
@@ -136,32 +159,8 @@ export async function getBidList(
   }
   let rows = (data ?? []) as BidAnnouncement[];
 
-  // ── Python-side 필터 (Supabase WHERE 로 표현 어려운 것) ──
-  const today = new Date();
-
-  if (filter.activeOnly) {
-    const todayIso = today.toISOString().slice(0, 10);
-    rows = rows.filter((r) => !r.close_date || r.close_date.slice(0, 10) >= todayIso);
-  }
-
-  if (filter.closingWithinDays != null && filter.closingWithinDays > 0) {
-    const limit = filter.closingWithinDays;
-    rows = rows.filter((r) => {
-      if (!r.close_date) return false;
-      const close = new Date(r.close_date.slice(0, 10));
-      const diff = Math.round((close.getTime() - todayMidnight(today)) / 86400000);
-      return diff >= 0 && diff <= limit;
-    });
-  }
-
-  if (filter.amountMinEok != null && filter.amountMinEok > 0) {
-    const min = filter.amountMinEok * 1e8;
-    rows = rows.filter((r) => (r.estimated_price ?? 0) >= min);
-  }
-  if (!filter.amountUnbounded && filter.amountMaxEok != null && filter.amountMaxEok < 9999) {
-    const max = filter.amountMaxEok * 1e8;
-    rows = rows.filter((r) => (r.estimated_price ?? Number.POSITIVE_INFINITY) <= max);
-  }
+  // ── Server-side 표현 어려운 필터만 client 후처리 ──
+  // (activeOnly / closingWithinDays / amount 는 위에서 server-side 처리됨)
 
   if (filter.regions?.length) {
     const set = new Set(filter.regions);
