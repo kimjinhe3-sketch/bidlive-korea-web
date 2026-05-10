@@ -24,9 +24,10 @@ import {
   Banknote,
   CalendarDays,
   Tags,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { BID_TYPES, SIDO_LIST } from "@/types/domain";
+import { BID_TYPES, SIDO_LIST, TAG_VALUES, TAG_LABEL, ATTENTION_LABEL } from "@/types/domain";
 
 /**
  * 상단 필터 툴바 — Linear/Stripe 식.
@@ -78,6 +79,7 @@ export function BidFilterToolbar() {
   // 현재 값
   const types = getList("types");
   const regions = getList("regions");
+  const tags = getList("tags");
   const orgKw = get("org");
   const activeOnly = getBool("active", true);
   const dday = get("dday");
@@ -92,7 +94,7 @@ export function BidFilterToolbar() {
   // 필터 적용 개수
   const activeCount = useMemo(() => {
     let n = 0;
-    for (const k of ["q", "org", "types", "regions", "dday", "amin", "amax", "from", "to", "inc", "exc"]) {
+    for (const k of ["q", "org", "types", "regions", "tags", "dday", "amin", "amax", "from", "to", "inc", "exc"]) {
       if (params.get(k)) n++;
     }
     if (params.get("active") === "0") n++;
@@ -137,6 +139,21 @@ export function BidFilterToolbar() {
           options={[...BID_TYPES]}
           value={types}
           onChange={(v) => setMany({ types: v })}
+        />
+      </FilterChip>
+
+      {/* 주목 (NEW / 마감임박) */}
+      <FilterChip
+        icon={Sparkles}
+        label={ATTENTION_LABEL}
+        valueText={tags.length > 0 ? tags.map((t) => TAG_LABEL[t as keyof typeof TAG_LABEL]).join(", ") : null}
+        badge={tags.length}
+      >
+        <ChipMulti
+          options={[...TAG_VALUES]}
+          labels={TAG_LABEL}
+          value={tags}
+          onChange={(v) => setMany({ tags: v })}
         />
       </FilterChip>
 
@@ -365,11 +382,14 @@ function ChipMulti({
   value,
   onChange,
   grid,
+  labels,
 }: {
-  options: string[];
+  options: readonly string[];
   value: string[];
   onChange: (v: string[]) => void;
   grid?: boolean;
+  /** value → display label 매핑 (없으면 value 그대로 표시) */
+  labels?: Record<string, string>;
 }) {
   const set = new Set(value);
   return (
@@ -391,7 +411,7 @@ function ChipMulti({
                 : "bg-white text-kt-dark-gray border-kt-light-gray/40 hover:border-kt-black hover:text-kt-black",
             )}
           >
-            {o}
+            {labels?.[o] ?? o}
           </button>
         );
       })}

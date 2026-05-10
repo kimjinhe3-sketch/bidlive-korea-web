@@ -5,7 +5,15 @@ import { BidTable } from "@/components/bids/bid-table";
 import { BidFilterToolbar } from "@/components/bids/bid-filter-toolbar";
 import { BidCollectButton } from "@/components/bids/bid-collect-button";
 import { BidExportButton } from "@/components/bids/bid-export-button";
-import { SOURCE_GROUPS, type SourceGroup, type Sido } from "@/types/domain";
+import {
+  SOURCE_GROUPS,
+  SORTABLE_COLUMNS,
+  type SourceGroup,
+  type Sido,
+  type TagValue,
+  type SortColumn,
+  type SortDir,
+} from "@/types/domain";
 
 export const metadata = { title: "대시보드 | BIDLIVE Korea" };
 export const dynamic = "force-dynamic";
@@ -29,12 +37,19 @@ export default async function BidsPage({ searchParams }: PageProps) {
       ? [groupParam as SourceGroup]
       : undefined;
 
+  // sort 검증 — SORTABLE_COLUMNS 의 키만 허용
+  const sortBy: SortColumn | undefined =
+    sp.sort && sp.sort in SORTABLE_COLUMNS ? (sp.sort as SortColumn) : undefined;
+  const sortDir: SortDir | undefined =
+    sp.dir === "asc" ? "asc" : sp.dir === "desc" ? "desc" : undefined;
+
   const filter = {
     groups,
     keyword: sp.q,
     orgKeyword: sp.org,
     bidTypes: parseList(sp.types),
     regions: parseList(sp.regions) as (Sido | "전국/기타")[],
+    tags: parseList(sp.tags) as TagValue[],
     activeOnly: sp.active !== "0",
     closingWithinDays: sp.dday ? Number(sp.dday) : undefined,
     amountMinEok: sp.amin ? Number(sp.amin) : undefined,
@@ -44,6 +59,8 @@ export default async function BidsPage({ searchParams }: PageProps) {
     dateTo: sp.to,
     includeKeywords: parseList(sp.inc),
     excludeKeywords: parseList(sp.exc),
+    sortBy,
+    sortDir,
   };
 
   const [kpis, rows] = await Promise.all([
@@ -88,7 +105,12 @@ export default async function BidsPage({ searchParams }: PageProps) {
             결과 <span className="font-bold text-kt-black num">{rows.length.toLocaleString("ko-KR")}</span>건
           </span>
         </div>
-        <BidTable rows={rows} />
+        <BidTable
+          rows={rows}
+          sort={sortBy ?? null}
+          dir={sortDir ?? null}
+          searchParams={sp}
+        />
       </section>
     </div>
   );

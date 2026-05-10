@@ -130,3 +130,31 @@ export function dDayLabel(closeDate: string | null, today: Date = new Date()): s
   if (diff <= 7) return `D-${diff}`;
   return null;
 }
+
+/**
+ * "주목" (Attention) 필터 — NEW 배지 / 마감임박 배지 둘 중 하나라도 해당.
+ * 컬럼명도 동일하게 사용 (table header).
+ */
+export const TAG_VALUES = ["new", "closing"] as const;
+export type TagValue = (typeof TAG_VALUES)[number];
+
+export const TAG_LABEL: Record<TagValue, string> = {
+  new: "신규",
+  closing: "마감임박",
+};
+
+/** "주목" 컬럼/필터 한국어 이름 — 필요시 한 곳만 수정하면 전체 반영 */
+export const ATTENTION_LABEL = "주목";
+
+/** 정렬 가능 컬럼 — DB 컬럼명과 매핑 */
+export const SORTABLE_COLUMNS = {
+  open_date: "공고일",
+  close_date: "마감일",
+  title: "제목",
+  org_name: "기관",
+  bid_type: "업종",
+  estimated_price: "금액",
+  source: "출처",
+} as const;
+export type SortColumn = keyof typeof SORTABLE_COLUMNS;
+export type SortDir = "asc" | "desc";

@@ -1,4 +1,5 @@
-import { ExternalLink } from "lucide-react";
+import Link from "next/link";
+import { ExternalLink, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { cn, formatEokWon } from "@/lib/utils";
 import {
   ddayTone,
@@ -7,27 +8,33 @@ import {
   extractSido,
   dDayLabel,
   SOURCE_LABELS,
+  ATTENTION_LABEL,
+  type SortColumn,
+  type SortDir,
 } from "@/types/domain";
 import type { BidWithAssignees } from "@/lib/queries/bids";
 import { BidAssigneeCell } from "./bid-assignee-cell";
 
 /**
- * 입찰 공고 테이블 v2.
- *
- * 컬럼:
- *  태그(NEW + 마감임박) · D-day · 제목 · 기관(+지역) · 업종 · 금액 · 마감일 · 출처 · 영업대표 · 열기
- *
- * - "신규" 정의: 입찰 공고일(open_date) 기준 오늘/어제/그제 (3일 이내)
- * - "마감임박" 정의: D-day, D-1, D-2 (3일 이내 마감)
- * - D-day 셀 너비 64px → 78px (nowrap, 'D-day' 도 한 줄)
+ * 입찰 공고 테이블 v3 — sortable headers, center align, 주목 컬럼.
  */
-export function BidTable({ rows }: { rows: BidWithAssignees[] }) {
+export function BidTable({
+  rows,
+  sort,
+  dir,
+  searchParams,
+}: {
+  rows: BidWithAssignees[];
+  sort: SortColumn | null;
+  dir: SortDir | null;
+  searchParams: Record<string, string | undefined>;
+}) {
   if (rows.length === 0) {
     return (
       <div className="rounded-lg border border-kt-light-gray/40 bg-white py-16 text-center">
         <p className="text-sm text-kt-dark-gray">조건에 해당하는 공고가 없습니다.</p>
         <p className="mt-1 text-xs text-kt-light-gray">
-          좌측 필터 패널에서 조건을 조정하거나 초기화 해보세요.
+          상단 필터에서 조건을 조정하거나 초기화 해보세요.
         </p>
       </div>
     );
@@ -38,17 +45,18 @@ export function BidTable({ rows }: { rows: BidWithAssignees[] }) {
       <div className="max-h-[calc(100vh-340px)] min-h-[480px] overflow-auto">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-white border-b border-kt-light-gray/40 z-10">
-            <tr className="text-left text-[11px] font-bold uppercase tracking-wider text-kt-dark-gray">
-              <th className="px-2 py-2.5 w-[88px] whitespace-nowrap">태그</th>
-              <th className="px-2 py-2.5 w-[78px] whitespace-nowrap text-center">D-day</th>
-              <th className="px-2 py-2.5 min-w-[260px]">제목</th>
-              <th className="px-2 py-2.5 w-[200px]">기관</th>
-              <th className="px-2 py-2.5 w-[64px] whitespace-nowrap text-center">업종</th>
-              <th className="px-2 py-2.5 w-[80px] whitespace-nowrap text-right">금액</th>
-              <th className="px-2 py-2.5 w-[96px] whitespace-nowrap">마감일</th>
-              <th className="px-2 py-2.5 w-[110px] whitespace-nowrap">출처</th>
-              <th className="px-2 py-2.5 w-[200px]">영업대표</th>
-              <th className="px-2 py-2.5 w-[40px]"></th>
+            <tr className="text-[11px] font-bold uppercase tracking-wider text-kt-dark-gray">
+              <ThStatic className="w-[88px]">{ATTENTION_LABEL}</ThStatic>
+              <ThSortable col="close_date" label="D-day" sort={sort} dir={dir} sp={searchParams} className="w-[88px]" />
+              <ThSortable col="title"      label="제목"  sort={sort} dir={dir} sp={searchParams} className="min-w-[260px]" align="left" />
+              <ThSortable col="org_name"   label="기관"  sort={sort} dir={dir} sp={searchParams} className="w-[200px]"     align="left" />
+              <ThSortable col="bid_type"   label="업종"  sort={sort} dir={dir} sp={searchParams} className="w-[64px]" />
+              <ThSortable col="estimated_price" label="금액" sort={sort} dir={dir} sp={searchParams} className="w-[88px]" align="right" />
+              <ThSortable col="close_date" label="마감일" sort={sort} dir={dir} sp={searchParams} className="w-[100px]" />
+              <ThSortable col="open_date"  label="공고일" sort={sort} dir={dir} sp={searchParams} className="w-[100px]" />
+              <ThSortable col="source"     label="출처"  sort={sort} dir={dir} sp={searchParams} className="w-[110px]" />
+              <ThStatic className="w-[200px]" align="left">영업대표</ThStatic>
+              <ThStatic className="w-[40px]"></ThStatic>
             </tr>
           </thead>
           <tbody>
@@ -62,6 +70,89 @@ export function BidTable({ rows }: { rows: BidWithAssignees[] }) {
   );
 }
 
+// ──────────────── headers ────────────────
+
+function ThStatic({
+  children,
+  className,
+  align = "center",
+}: {
+  children?: React.ReactNode;
+  className?: string;
+  align?: "left" | "center" | "right";
+}) {
+  return (
+    <th
+      className={cn(
+        "px-2 py-2.5 whitespace-nowrap",
+        align === "center" ? "text-center" : align === "right" ? "text-right" : "text-left",
+        className,
+      )}
+    >
+      {children}
+    </th>
+  );
+}
+
+function ThSortable({
+  col,
+  label,
+  sort,
+  dir,
+  sp,
+  className,
+  align = "center",
+}: {
+  col: SortColumn;
+  label: string;
+  sort: SortColumn | null;
+  dir: SortDir | null;
+  sp: Record<string, string | undefined>;
+  className?: string;
+  align?: "left" | "center" | "right";
+}) {
+  const active = sort === col;
+  const nextDir: SortDir | null = !active ? "asc" : dir === "asc" ? "desc" : null;
+
+  // 다음 상태로 가는 URL 빌드
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(sp)) {
+    if (v && k !== "sort" && k !== "dir") params.set(k, v);
+  }
+  if (nextDir) {
+    params.set("sort", col);
+    params.set("dir", nextDir);
+  }
+  const href = "/bids" + (params.toString() ? `?${params.toString()}` : "");
+
+  const Icon = !active ? ArrowUpDown : dir === "asc" ? ArrowUp : ArrowDown;
+
+  return (
+    <th
+      className={cn(
+        "px-2 py-2.5 whitespace-nowrap",
+        align === "center" ? "text-center" : align === "right" ? "text-right" : "text-left",
+        className,
+      )}
+    >
+      <Link
+        href={href}
+        scroll={false}
+        className={cn(
+          "inline-flex items-center gap-1 rounded px-1 py-0.5 transition-colors hover:bg-kt-light-gray/15",
+          active ? "text-kt-red" : "text-kt-dark-gray hover:text-kt-black",
+          align === "right" && "flex-row-reverse",
+        )}
+      >
+        {label}
+        <Icon className={cn("h-3 w-3", !active && "opacity-40")} />
+      </Link>
+    </th>
+  );
+}
+
+// ──────────────── rows ────────────────
+
 function BidRow({ row }: { row: BidWithAssignees }) {
   const dday = dDayLabel(row.close_date);
   const fresh = isFreshOpen(row.open_date);
@@ -70,15 +161,15 @@ function BidRow({ row }: { row: BidWithAssignees }) {
 
   return (
     <tr className="border-b border-kt-light-gray/20 hover:bg-kt-light-gray/[0.04] transition-colors">
-      {/* 태그 */}
-      <td className="px-2 py-2 align-top">
-        <div className="flex flex-wrap gap-1">
+      {/* 주목 */}
+      <td className="px-2 py-2 align-top text-center">
+        <div className="inline-flex flex-wrap justify-center gap-1">
           {fresh && <Tag tone="purple">NEW</Tag>}
           {closing && <Tag tone="red">마감임박</Tag>}
         </div>
       </td>
 
-      {/* D-day (nowrap, 가운데) */}
+      {/* D-day */}
       <td className="px-2 py-2 align-top text-center">
         <DdayBadge label={dday} />
       </td>
@@ -101,7 +192,7 @@ function BidRow({ row }: { row: BidWithAssignees }) {
         </div>
       </td>
 
-      {/* 기관 + 지역 작게 */}
+      {/* 기관 */}
       <td className="px-2 py-2 align-top">
         <div className="text-xs text-kt-dark-gray line-clamp-2">{row.org_name ?? "-"}</div>
         {sido !== "전국/기타" && (
@@ -130,12 +221,17 @@ function BidRow({ row }: { row: BidWithAssignees }) {
       </td>
 
       {/* 마감일 */}
-      <td className="px-2 py-2 align-top text-xs text-kt-dark-gray num">
+      <td className="px-2 py-2 align-top text-center text-xs text-kt-dark-gray num">
         {row.close_date ? row.close_date.slice(0, 10) : "-"}
       </td>
 
+      {/* 공고일 */}
+      <td className="px-2 py-2 align-top text-center text-xs text-kt-dark-gray num">
+        {row.open_date ? row.open_date.slice(0, 10) : "-"}
+      </td>
+
       {/* 출처 */}
-      <td className="px-2 py-2 align-top text-[11px] text-kt-dark-gray">
+      <td className="px-2 py-2 align-top text-center text-[11px] text-kt-dark-gray">
         {SOURCE_LABELS[row.source] ?? row.source}
       </td>
 
@@ -145,7 +241,7 @@ function BidRow({ row }: { row: BidWithAssignees }) {
       </td>
 
       {/* 외부 링크 */}
-      <td className="px-2 py-2 align-top">
+      <td className="px-2 py-2 align-top text-center">
         {row.detail_url && (
           <a
             href={row.detail_url}

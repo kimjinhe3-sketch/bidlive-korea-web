@@ -5,8 +5,13 @@ import {
   SOURCE_GROUPS,
   SOURCE_GROUP_ORDER,
   extractSido,
+  isFreshOpen,
+  isClosingSoon,
   type SourceGroup,
   type Sido,
+  type SortColumn,
+  type SortDir,
+  type TagValue,
 } from "@/types/domain";
 import type { BidAnnouncement, BidAssignee } from "@/types/database";
 
@@ -88,6 +93,9 @@ export interface BidListFilter {
   dateTo?: string;
   includeKeywords?: string[];     // 제목에 하나라도 있으면 통과
   excludeKeywords?: string[];     // 제목에 하나라도 있으면 제외
+  tags?: TagValue[];              // 주목 필터: 신규(new) / 마감임박(closing) — OR
+  sortBy?: SortColumn;            // 정렬 컬럼 (없으면 created_at)
+  sortDir?: SortDir;              // asc / desc (없으면 desc)
 }
 
 export interface BidWithAssignees extends BidAnnouncement {
@@ -104,10 +112,14 @@ export async function getBidList(
     ? filter.groups.flatMap((g) => [...SOURCE_GROUPS[g]])
     : null;
 
+  // 정렬 — 사용자 지정 우선, 없으면 created_at DESC
+  const sortCol = filter.sortBy ?? "created_at";
+  const sortAsc = filter.sortDir === "asc";
+
   let q = supabase
     .from("bid_announcements")
     .select("*")
-    .order("created_at", { ascending: false })
+    .order(sortCol, { ascending: sortAsc, nullsFirst: false })
     .limit(limit);
 
   if (sources) q = q.in("source", sources);
@@ -167,6 +179,16 @@ export async function getBidList(
     rows = rows.filter((r) =>
       !kws.some((k) => (r.title ?? "").toLowerCase().includes(k))
     );
+  }
+
+  // 주목 필터 — new (공고일 3일 이내) / closing (D-2 이내). OR 결합.
+  if (filter.tags?.length) {
+    const tagSet = new Set(filter.tags);
+    rows = rows.filter((r) => {
+      if (tagSet.has("new") && isFreshOpen(r.open_date)) return true;
+      if (tagSet.has("closing") && isClosingSoon(r.close_date)) return true;
+      return false;
+    });
   }
 
   // ── assignees join (별도 쿼리 — 작은 N) ──
