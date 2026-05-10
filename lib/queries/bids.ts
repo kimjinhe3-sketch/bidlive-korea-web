@@ -162,7 +162,9 @@ export async function getBidListPaged(
   if (filter.keyword) q = q.ilike("title", `%${filter.keyword}%`);
   if (filter.orgKeyword) q = q.ilike("org_name", `%${filter.orgKeyword}%`);
   if (filter.dateFrom) q = q.gte("open_date", filter.dateFrom);
-  if (filter.dateTo) q = q.lte("open_date", filter.dateTo);
+  // dateTo 는 lt next-day — open_date 가 "YYYY-MM-DD HH:MM:SS" 라
+  // lte same-day 비교 시 lex 로 "2026-05-11 12:00" > "2026-05-11" → 누락됨.
+  if (filter.dateTo) q = q.lt("open_date", addOneDay(filter.dateTo));
 
   // 활성 공고만 — server-side push (close_date NULL 이거나 오늘 이상, KST 기준)
   // 주의: DB 의 close_date 가 정규화(YYYY-MM-DD)된 상태여야 lex 비교 정상.
@@ -172,13 +174,13 @@ export async function getBidListPaged(
     q = q.or(`close_date.is.null,close_date.gte.${todayKst}`);
   }
 
-  // D-n 임박 — server-side (KST)
+  // D-n 임박 — server-side (KST). lte 는 timestamp 누락 위험이라 lt next-day.
   if (filter.closingWithinDays != null && filter.closingWithinDays > 0) {
     const todayKst = todayKstStr();
     const [y, m, d] = todayKst.split("-").map(Number);
-    const limitDate = new Date(Date.UTC(y, m - 1, d + filter.closingWithinDays));
-    const limitKst = limitDate.toISOString().slice(0, 10);
-    q = q.gte("close_date", todayKst).lte("close_date", limitKst);
+    const limitExclusive = new Date(Date.UTC(y, m - 1, d + filter.closingWithinDays + 1))
+      .toISOString().slice(0, 10);
+    q = q.gte("close_date", todayKst).lt("close_date", limitExclusive);
   }
 
   // 금액 — server-side
@@ -271,6 +273,12 @@ function todayKstStr(): string {
   const now = new Date();
   const kst = new Date(now.getTime() + 9 * 3600 * 1000);
   return kst.toISOString().slice(0, 10);
+}
+
+/** "YYYY-MM-DD" 의 다음날 "YYYY-MM-DD". timestamp 누락 막기 위한 inclusive→exclusive 변환용. */
+function addOneDay(ymd: string): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
 }
 
 function startOfDayKstIso(): string {
