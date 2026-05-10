@@ -117,6 +117,55 @@ export function extractSido(
 }
 
 /**
+ * 지역 라벨 — 광역 시·도 + 시·군·구 까지 추론.
+ *   - 광역 식별 + 그 안 시·군·구 매치 → "서울 강남구"
+ *   - 광역 미식별 + 유일 시·군·구 매치 → "{sido} {muni}"
+ *   - 광역 미식별 + 동명 시·군·구 (광주시 / 동구 / 중구 등) → "-"
+ *   - 그 외 → 광역만, region fallback, 또는 "-"
+ *
+ * 동적 import 회피 — municipality 모듈은 domain 의 type 만 import (cycle 없음).
+ */
+import {
+  detectMunicipality,
+  detectStandaloneMuniWithSido,
+  AMBIGUOUS_MUNICIPALITIES,
+} from "./municipality";
+
+export function extractRegionLabel(
+  orgName: string | null,
+  region: string | null = null,
+  title: string | null = null,
+): { label: string; sido: Sido | "전국/기타"; muni: string | null; ambiguous: boolean } {
+  const sido = extractSido(orgName, region, title);
+  const allText = [region, orgName, title].filter(Boolean).join(" ");
+
+  if (sido !== "전국/기타") {
+    const muni = detectMunicipality(sido, allText);
+    return { label: muni ? `${sido} ${muni}` : sido, sido, muni, ambiguous: false };
+  }
+
+  // 광역 미식별 — 유일 시·군·구 매치 시 그것으로 광역 추론
+  const standalone = detectStandaloneMuniWithSido(allText);
+  if (standalone) {
+    return {
+      label: `${standalone.sido} ${standalone.muni}`,
+      sido: standalone.sido,
+      muni: standalone.muni,
+      ambiguous: false,
+    };
+  }
+
+  // 동명 시·군·구 (광주시, 동구, 중구 등) 만 등장 시 — 광역 미상이라 "-"
+  for (const m of Object.keys(AMBIGUOUS_MUNICIPALITIES)) {
+    if (allText.includes(m)) {
+      return { label: "-", sido: "전국/기타", muni: null, ambiguous: true };
+    }
+  }
+
+  return { label: "-", sido: "전국/기타", muni: null, ambiguous: false };
+}
+
+/**
  * D-day 톤 (DESIGN_SYSTEM 1-4):
  *   danger (D-2/D-1/D-day) · warn (D-3) · track (D-4~D-7) · muted (마감)
  */

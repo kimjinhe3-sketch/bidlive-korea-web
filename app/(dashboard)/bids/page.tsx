@@ -1,10 +1,11 @@
-import { getBidKpis, getBidList } from "@/lib/queries/bids";
+import { getBidKpis, getBidListPaged } from "@/lib/queries/bids";
 import { BidKpiGrid } from "@/components/bids/bid-kpi-grid";
 import { BidSourceTabs } from "@/components/bids/bid-source-tabs";
 import { BidTable } from "@/components/bids/bid-table";
 import { BidFilterToolbar } from "@/components/bids/bid-filter-toolbar";
 import { BidCollectButton } from "@/components/bids/bid-collect-button";
 import { BidExportButton } from "@/components/bids/bid-export-button";
+import { BidPagination } from "@/components/bids/bid-pagination";
 import {
   SOURCE_GROUPS,
   SORTABLE_COLUMNS,
@@ -25,6 +26,11 @@ interface PageProps {
 function parseList(s: string | undefined) {
   if (!s) return [];
   return s.split(",").map((x) => x.trim()).filter(Boolean);
+}
+
+function clampInt(s: string | undefined, def: number, allowed: number[]): number {
+  const n = parseInt(s ?? "", 10);
+  return allowed.includes(n) ? n : def;
 }
 
 export default async function BidsPage({ searchParams }: PageProps) {
@@ -63,12 +69,15 @@ export default async function BidsPage({ searchParams }: PageProps) {
     sortDir,
   };
 
-  // cleanup (close_date 7일 지나면 자동 삭제) 으로 활성 row 줄어듦 → limit 풀어도 OK
-  const LIST_LIMIT = 1500;
-  const [kpis, rows] = await Promise.all([
+  // 페이지네이션 — URL ?page=N&size=50
+  const pageSize = clampInt(sp.size, 50, [50, 100, 200, 500]);
+  const pageNum = Math.max(1, parseInt(sp.page ?? "1", 10) || 1);
+
+  const [kpis, listResult] = await Promise.all([
     getBidKpis(),
-    getBidList(filter, LIST_LIMIT),
+    getBidListPaged(filter, pageSize, pageNum),
   ]);
+  const { rows, total } = listResult;
 
   // KPI 카드 클릭 → 오늘 공고 리스트 (open_date = 오늘) 로 이동할 때 사용
   const todayKst = new Date(new Date().getTime() + 9 * 3600 * 1000)
@@ -88,7 +97,7 @@ export default async function BidsPage({ searchParams }: PageProps) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <BidExportButton rows={rows} />
+          <BidExportButton totalCount={total} />
           <BidCollectButton />
         </div>
       </div>
@@ -99,14 +108,16 @@ export default async function BidsPage({ searchParams }: PageProps) {
       {/* 3. 필터 툴바 — 표 위 한 줄 */}
       <BidFilterToolbar />
 
-      {/* 4. 소스 segment + 결과 카운트 + 테이블 */}
+      {/* 4. 소스 segment + 결과 카운트 + 테이블 + 페이지네이션 */}
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <BidSourceTabs />
           <span className="text-xs font-medium text-kt-dark-gray">
-            결과 <span className="font-bold text-kt-black num">{rows.length.toLocaleString("ko-KR")}</span>건
-            {rows.length === LIST_LIMIT && (
-              <span className="ml-1 text-[11px] text-kt-red">(최대 {LIST_LIMIT}건 — 필터로 좁히세요)</span>
+            결과 총 <span className="font-bold text-kt-black num">{total.toLocaleString("ko-KR")}</span>건
+            {total > pageSize && (
+              <span className="ml-1 text-[11px] text-kt-light-gray">
+                ({pageNum} / {Math.ceil(total / pageSize)} 페이지)
+              </span>
             )}
           </span>
         </div>
@@ -116,6 +127,7 @@ export default async function BidsPage({ searchParams }: PageProps) {
           dir={sortDir ?? null}
           searchParams={sp}
         />
+        <BidPagination total={total} pageSize={pageSize} pageNum={pageNum} />
       </section>
     </div>
   );

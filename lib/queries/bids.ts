@@ -102,10 +102,39 @@ export interface BidWithAssignees extends BidAnnouncement {
   assignees: BidAssignee[];
 }
 
+export interface BidListResult {
+  rows: BidWithAssignees[];
+  total: number;
+  /** 현재 page/size 가 적용됐는지 (false면 클라이언트 후처리 다 받음) */
+  paginated: boolean;
+}
+
+/**
+ * Server pagination 가능 여부 — region/keyword/tag 필터는 client 후처리라
+ * 활성 시 정확한 server count 불가 → 한 번에 더 받아서 클라 페이지네이션.
+ */
+function hasClientSideFilters(f: BidListFilter): boolean {
+  return (
+    !!f.regions?.length ||
+    !!f.includeKeywords?.length ||
+    !!f.excludeKeywords?.length ||
+    !!f.tags?.length
+  );
+}
+
 export async function getBidList(
   filter: BidListFilter = {},
   limit: number = 1000,
 ): Promise<BidWithAssignees[]> {
+  const result = await getBidListPaged(filter, limit, 1);
+  return result.rows;
+}
+
+export async function getBidListPaged(
+  filter: BidListFilter = {},
+  pageSize: number = 50,
+  pageNum: number = 1,
+): Promise<BidListResult> {
   const supabase = await createClient();
 
   const sources = filter.groups?.length
@@ -116,11 +145,17 @@ export async function getBidList(
   const sortCol = filter.sortBy ?? "created_at";
   const sortAsc = filter.sortDir === "asc";
 
+  // 클라이언트 후처리 필터 활성 시 server pagination 정확도 떨어짐 → 한 번에 많이 받음.
+  const useClientPagination = hasClientSideFilters(filter);
+  const fetchSize = useClientPagination ? 5000 : pageSize;
+  const startIdx = useClientPagination ? 0 : (pageNum - 1) * pageSize;
+  const endIdx = startIdx + fetchSize - 1;
+
   let q = supabase
     .from("bid_announcements")
-    .select("*")
+    .select("*", { count: useClientPagination ? undefined : "exact" })
     .order(sortCol, { ascending: sortAsc, nullsFirst: false })
-    .limit(limit);
+    .range(startIdx, endIdx);
 
   if (sources) q = q.in("source", sources);
   if (filter.bidTypes?.length) q = q.in("bid_type", filter.bidTypes);
@@ -152,10 +187,10 @@ export async function getBidList(
     q = q.lte("estimated_price", filter.amountMaxEok * 1e8);
   }
 
-  const { data, error } = await q;
+  const { data, error, count: serverCount } = await q;
   if (error) {
     console.error("[bids:getBidList]", JSON.stringify(error, null, 2));
-    return [];
+    return { rows: [], total: 0, paginated: false };
   }
   let rows = (data ?? []) as BidAnnouncement[];
 
@@ -190,16 +225,25 @@ export async function getBidList(
     });
   }
 
+  // 클라이언트 후처리 후 페이지네이션 (필요 시)
+  let total: number;
+  if (useClientPagination) {
+    total = rows.length;
+    const sliceStart = (pageNum - 1) * pageSize;
+    rows = rows.slice(sliceStart, sliceStart + pageSize);
+  } else {
+    total = serverCount ?? rows.length;
+  }
+
   // ── assignees join (별도 쿼리 — 작은 N) ──
   const ids = rows.map((r) => r.id);
-  let assigneesByBid = new Map<number, BidAssignee[]>();
+  const assigneesByBid = new Map<number, BidAssignee[]>();
   if (ids.length > 0) {
     const { data: aData, error: aError } = await supabase
       .from("bid_assignees")
       .select("*")
       .in("bid_id", ids);
     if (aError) {
-      // 테이블 없으면 무시 (사용자가 SQL 미적용)
       console.warn("[bids:getBidList] assignees skip:", aError.message);
     } else {
       const arr = (aData ?? []) as BidAssignee[];
@@ -211,7 +255,11 @@ export async function getBidList(
     }
   }
 
-  return rows.map((r) => ({ ...r, assignees: assigneesByBid.get(r.id) ?? [] }));
+  return {
+    rows: rows.map((r) => ({ ...r, assignees: assigneesByBid.get(r.id) ?? [] })),
+    total,
+    paginated: !useClientPagination,
+  };
 }
 
 // ───────────────────── helpers ─────────────────────
