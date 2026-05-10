@@ -148,6 +148,27 @@ function extractItems(body: unknown): Record<string, unknown>[] {
   return [];
 }
 
+/**
+ * 진단용 GET — 인증 없이 호출 가능, 환경변수 존재 여부만 노출 (값 자체는 X).
+ * 배포 확인 + 누락 변수 식별용.
+ */
+export async function GET() {
+  return NextResponse.json({
+    version: "d7870c8+",
+    env: {
+      KEPCO_API_KEY:               { set: !!process.env.KEPCO_API_KEY,
+                                     length: process.env.KEPCO_API_KEY?.length ?? 0 },
+      COLLECT_SECRET:              { set: !!process.env.COLLECT_SECRET,
+                                     length: process.env.COLLECT_SECRET?.length ?? 0 },
+      NEXT_PUBLIC_SUPABASE_URL:    { set: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+                                     length: process.env.NEXT_PUBLIC_SUPABASE_URL?.length ?? 0 },
+      SUPABASE_SERVICE_ROLE_KEY:   { set: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+                                     length: process.env.SUPABASE_SERVICE_ROLE_KEY?.length ?? 0 },
+    },
+    node: process.version,
+  });
+}
+
 export async function POST(req: Request) {
   // 모든 단계 try/catch — 어디서 실패하든 JSON 응답 보장 (Cloudtype 502 회피)
   const stages: string[] = [];
