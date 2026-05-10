@@ -21,7 +21,7 @@ export function BidExportButton({ rows }: { rows: BidWithAssignees[] }) {
         "공고번호": r.bid_no,
         "제목": r.title,
         "기관": r.org_name ?? "",
-        "지역": extractSido(r.org_name, r.region),
+        "지역": extractSido(r.org_name, r.region, r.title),
         "지역(원본)": r.region ?? "",
         "업종": r.bid_type ?? "",
         "금액(원)": r.estimated_price ?? "",

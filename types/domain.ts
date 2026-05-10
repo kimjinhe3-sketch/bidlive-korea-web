@@ -64,22 +64,54 @@ export const SIDO_LIST = [
 ] as const;
 export type Sido = (typeof SIDO_LIST)[number];
 
-/** 시·도 추출 — region 컬럼 우선, 없으면 org_name 에서 substring 매치, 그래도 없으면 "전국/기타". */
+/**
+ * 시·도 추출 — region 우선, 없으면 org_name + title 에서 추론.
+ * 우선순위:
+ *   1. region 컬럼 (API 가 명시)
+ *   2. org_name (예: "서울특별시", "부산교통공사" 등)
+ *   3. title (예: "(부산) ○○○공사", "강원 정선군 ..." 등)
+ */
 export function extractSido(
   orgName: string | null,
   region: string | null = null,
+  title: string | null = null,
 ): Sido | "전국/기타" {
-  // 1순위: region 컬럼
-  if (region) {
-    for (const s of SIDO_LIST) {
-      if (region.includes(s)) return s;
+  // 보너스 매핑 — 약어/별칭 → 표준 시·도
+  const ALIASES: Record<string, Sido> = {
+    "서울특별시": "서울", "부산광역시": "부산", "대구광역시": "대구",
+    "인천광역시": "인천", "광주광역시": "광주", "대전광역시": "대전",
+    "울산광역시": "울산", "세종특별자치시": "세종",
+    "경기도": "경기", "강원도": "강원", "강원특별자치도": "강원",
+    "충청북도": "충북", "충청남도": "충남",
+    "전라북도": "전북", "전북특별자치도": "전북",
+    "전라남도": "전남",
+    "경상북도": "경북", "경상남도": "경남",
+    "제주특별자치도": "제주", "제주도": "제주",
+  };
+
+  function search(text: string): Sido | null {
+    // 별칭 (긴 매치) 먼저
+    for (const alias in ALIASES) {
+      if (text.includes(alias)) return ALIASES[alias];
     }
+    // 표준 시·도 (짧은 키워드)
+    for (const s of SIDO_LIST) {
+      if (text.includes(s)) return s;
+    }
+    return null;
   }
-  // 2순위: org_name fallback (legacy 데이터)
+
+  if (region) {
+    const m = search(region);
+    if (m) return m;
+  }
   if (orgName) {
-    for (const s of SIDO_LIST) {
-      if (orgName.includes(s)) return s;
-    }
+    const m = search(orgName);
+    if (m) return m;
+  }
+  if (title) {
+    const m = search(title);
+    if (m) return m;
   }
   return "전국/기타";
 }

@@ -158,7 +158,7 @@ function BidRow({ row }: { row: BidWithAssignees }) {
   const dday = dDayLabel(row.close_date);
   const fresh = isFreshOpen(row.open_date);
   const closing = isClosingSoon(row.close_date);
-  const sido = extractSido(row.org_name, row.region);
+  const sido = extractSido(row.org_name, row.region, row.title);
 
   return (
     <tr className="border-b border-kt-light-gray/20 hover:bg-kt-light-gray/[0.04] transition-colors">
