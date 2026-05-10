@@ -1,95 +1,204 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+/**
+ * KEPCO 수집 프록시 — Cloudtype (한국 region) 에서 KEPCO API 호출 + Supabase 적재.
+ * GitHub Actions runner 가 KEPCO 에서 차단당해 우회용.
+ */
+
 const KEPCO_BASE_URL = "https://bigdata.kepco.co.kr/openapi/v1/electContract.do";
+
+const PURCHASE_TYPE_LABELS: Record<string, string> = {
+  Product: "물품",
+  Goods: "물품",
+  Construction: "공사",
+  Service: "용역",
+  ConstructionService: "공사",
+};
+
+const COMPANY_LABELS: Record<string, string> = {
+  COM01: "한국전력공사",
+  COM02: "한국서부발전",
+  COM03: "한국전력국제원자력대학원대학교",
+  COM04: "한국남부발전",
+  COM05: "한국중부발전",
+  COM06: "한국남동발전",
+  COM08: "한국동서발전",
+  COM09: "한국전력기술",
+  COM10: "한전KPS",
+  COM11: "한국전력거래소",
+  COM12: "한국원자력연료",
+  COM14: "한국발전교육원",
+  COM16: "한국해상풍력",
+  COM19: "KAPES",
+};
+
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 
-export async function GET() {
-  return NextResponse.json({ version: "step4-upsert-1row" });
+const BATCH_SIZE = 50;  // 다량 upsert 시 Cloudtype 가 process crash → 분할
+
+function dateRange(lookbackDays: number) {
+  const nowKst = new Date(Date.now() + 9 * 3600 * 1000);
+  nowKst.setUTCHours(0, 0, 0, 0);
+  const end = new Date(nowKst.getTime() - 1000);
+  const start = new Date(nowKst);
+  start.setUTCDate(start.getUTCDate() - (lookbackDays - 1));
+  const fmt = (d: Date) =>
+    d.getUTCFullYear().toString() +
+    String(d.getUTCMonth() + 1).padStart(2, "0") +
+    String(d.getUTCDate()).padStart(2, "0");
+  return { begin: fmt(start), end: fmt(end) };
 }
 
-/**
- * STEP4: KEPCO fetch + 1 row 만 upsert.
- * 502 면 upsert 자체가 문제 (단일 row 도 fail).
- * 200 면 다량 upsert 가 문제 → batch 분할 필요.
- */
+function pickStr(item: Record<string, unknown>, keys: string[]): string | null {
+  for (const k of keys) {
+    const v = item[k];
+    if (v != null && v !== "") return String(v);
+  }
+  return null;
+}
+
+function safeInt(v: unknown): number | null {
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.floor(n) : null;
+}
+
+function pickAttachmentUrl(item: Record<string, unknown>): string | null {
+  let preferred: string | null = null;
+  let fallback: string | null = null;
+  for (let i = 1; i <= 5; i++) {
+    const fname = String(item[`filename${i}`] ?? "");
+    let flink = String(item[`filenlink${i}`] ?? "").trim();
+    if (!flink) continue;
+    if (flink.startsWith("http://")) flink = "https://" + flink.slice(7);
+    if (!preferred && (fname.includes("공고") || fname.includes("안내"))) preferred = flink;
+    if (!fallback) fallback = flink;
+  }
+  return preferred ?? fallback;
+}
+
+interface NormalizedRow {
+  source: string;
+  bid_no: string;
+  title: string;
+  org_name: string;
+  region: string | null;
+  contract_method: string | null;
+  estimated_price: number | null;
+  open_date: string | null;
+  close_date: string | null;
+  bid_type: string;
+  detail_url: string | null;
+}
+
+function normalize(item: Record<string, unknown>): NormalizedRow | null {
+  const bidNo = pickStr(item, ["no", "noticeNo", "bidNo", "contractNo"]);
+  const title = pickStr(item, ["name", "noticeName", "bidName", "title"]);
+  if (!bidNo || !title) return null;
+  const companyId = String(item.companyId ?? "");
+  const orgName =
+    COMPANY_LABELS[companyId] ?? pickStr(item, ["companyName", "company"]) ?? "한국전력공사";
+  const purchaseType = pickStr(item, ["purchaseType", "progressState", "contractMethod"]);
+  const bidType = (purchaseType && PURCHASE_TYPE_LABELS[purchaseType]) || "기타";
+  return {
+    source: "kepco_api",
+    bid_no: `kepco-${bidNo.trim()}`,
+    title: title.trim(),
+    org_name: orgName,
+    region: null,
+    contract_method: purchaseType,
+    estimated_price: safeInt(pickStr(item, ["presumedPrice", "bidLimitAmt", "contractAmt", "budgetAmt"])),
+    open_date: pickStr(item, ["beginDatetime", "noticeDate", "noticeBeginDate"]),
+    close_date: pickStr(item, ["endDatetime", "bidAttendReqCloseDatetime", "closeDate"]),
+    bid_type: bidType,
+    detail_url: pickAttachmentUrl(item),
+  };
+}
+
+export async function GET() {
+  return NextResponse.json({ version: "v1-batch-50" });
+}
+
 export async function POST(req: Request) {
-  const log: string[] = [];
   try {
-    log.push("auth-check");
-    const secret = process.env.COLLECT_SECRET;
-    if (secret && req.headers.get("x-collect-secret") !== secret) {
+    // auth
+    const expected = process.env.COLLECT_SECRET;
+    if (expected && req.headers.get("x-collect-secret") !== expected) {
       return NextResponse.json({ ok: false, error: "unauthorized" });
     }
+    const apiKey = process.env.KEPCO_API_KEY;
+    if (!apiKey) return NextResponse.json({ ok: false, error: "no KEPCO_API_KEY" });
 
-    log.push("env-check");
-    const apiKey = process.env.KEPCO_API_KEY!;
+    const lookback = Math.max(1, Math.min(90, Number(req.headers.get("x-lookback-days") ?? "14")));
+    const { begin, end } = dateRange(lookback);
 
-    log.push("kepco-fetch");
+    // KEPCO fetch
     const url = new URL(KEPCO_BASE_URL);
     url.searchParams.set("apiKey", apiKey);
-    url.searchParams.set("noticeBeginDate", "20220919");
-    url.searchParams.set("noticeEndDate", "20220920");
+    url.searchParams.set("noticeBeginDate", begin);
+    url.searchParams.set("noticeEndDate", end);
     url.searchParams.set("returnType", "json");
     const r = await fetch(url.toString(), {
       headers: { "User-Agent": UA, Accept: "*/*" },
       cache: "no-store",
       signal: AbortSignal.timeout(20000),
     });
-    log.push(`kepco-status:${r.status}`);
-    const j = await r.json();
-    const items = Array.isArray(j?.data) ? j.data : [];
-    log.push(`items:${items.length}`);
+    if (!r.ok) {
+      const txt = await r.text();
+      return NextResponse.json({ ok: false, error: `KEPCO ${r.status}`, body: txt.slice(0, 200), window: { begin, end } });
+    }
+    const body = await r.json();
+    const items: Record<string, unknown>[] = Array.isArray(body?.data)
+      ? body.data
+      : Array.isArray(body) ? body : [];
 
-    if (items.length === 0) {
-      return NextResponse.json({ ok: true, log, note: "no items to upsert" });
+    // normalize + dedupe
+    const seen = new Set<string>();
+    const rows: NormalizedRow[] = [];
+    for (const it of items) {
+      const n = normalize(it);
+      if (n && !seen.has(n.bid_no)) {
+        seen.add(n.bid_no);
+        rows.push(n);
+      }
     }
 
-    log.push("normalize-1");
-    const it = items[0] as Record<string, unknown>;
-    const bidNo = String(it.no ?? it.noticeNo ?? "");
-    const title = String(it.name ?? it.bidName ?? "");
-    const row = {
-      source: "kepco_api",
-      bid_no: `kepco-${bidNo}`,
-      title,
-      org_name: "한국전력공사",
-      region: null,
-      contract_method: it.purchaseType ?? null,
-      estimated_price: it.presumedPrice ? Number(it.presumedPrice) : null,
-      open_date: it.beginDatetime ?? null,
-      close_date: it.endDatetime ?? null,
-      bid_type: "공사",
-      detail_url: null,
-    };
-    log.push(`row:${row.bid_no}`);
+    if (rows.length === 0) {
+      return NextResponse.json({ ok: true, fetched: 0, upserted: 0, window: { begin, end }, note: "lookback 구간 데이터 없음" });
+    }
 
-    log.push("admin-create");
+    // batch upsert — Cloudtype Sandbox 의 메모리/타임아웃 회피
     const supabase = createAdminClient();
-    log.push("admin-ok");
-
-    log.push("upsert-start");
-    const upStart = Date.now();
-    const { error, data } = await supabase
-      .from("bid_announcements")
-      .upsert([row] as never, { onConflict: "source,bid_no" })
-      .select("id");
-    log.push(`upsert-done-${Date.now() - upStart}ms`);
+    let upserted = 0;
+    const errors: { batch: number; error: string }[] = [];
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+      const chunk = rows.slice(i, i + BATCH_SIZE);
+      const { error } = await supabase
+        .from("bid_announcements")
+        .upsert(chunk as never, { onConflict: "source,bid_no" });
+      if (error) {
+        errors.push({ batch: Math.floor(i / BATCH_SIZE), error: error.message });
+      } else {
+        upserted += chunk.length;
+      }
+    }
 
     return NextResponse.json({
-      ok: !error,
-      log,
-      upsert_error: error ? { message: error.message, code: error.code, details: error.details } : null,
-      upsert_data: data,
+      ok: errors.length === 0,
+      fetched: rows.length,
+      upserted,
+      batches: Math.ceil(rows.length / BATCH_SIZE),
+      errors,
+      window: { begin, end },
     });
   } catch (e) {
     return NextResponse.json({
       ok: false,
-      log,
       exception: e instanceof Error ? e.message : String(e),
-      stack: e instanceof Error ? e.stack?.split("\n").slice(0, 5).join("\n") : null,
+      stack: e instanceof Error ? e.stack?.split("\n").slice(0, 4).join("\n") : null,
     });
   }
 }
