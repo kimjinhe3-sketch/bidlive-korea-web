@@ -7,6 +7,9 @@
  *  - 기타: alio + 누리장터 + d2b + kwater + kec
  */
 
+// municipality 모듈은 domain 의 type 만 import 하므로 runtime cycle 없음.
+import { detectStandaloneMuniWithSido } from "./municipality";
+
 export const SOURCE_GROUPS = {
   나라장터: [
     "g2b_api_thng", "g2b_api_servc", "g2b_api_cnstwk",
@@ -70,6 +73,8 @@ export type Sido = (typeof SIDO_LIST)[number];
  *   1. region 컬럼 (API 가 명시)
  *   2. org_name (예: "서울특별시", "부산교통공사" 등)
  *   3. title (예: "(부산) ○○○공사", "강원 정선군 ..." 등)
+ *   4. title/org_name 의 시·군·구 명에서 역추론 (예: "성남시" → 경기, "동해시" → 강원)
+ *      단, 동명 (광주시·동구·중구 등) 은 광역 미상이라 "전국/기타" 유지.
  */
 export function extractSido(
   orgName: string | null,
@@ -113,56 +118,16 @@ export function extractSido(
     const m = search(title);
     if (m) return m;
   }
-  return "전국/기타";
-}
 
-/**
- * 지역 라벨 — 광역 시·도 + 시·군·구 까지 추론.
- *   - 광역 식별 + 그 안 시·군·구 매치 → "서울 강남구"
- *   - 광역 미식별 + 유일 시·군·구 매치 → "{sido} {muni}"
- *   - 광역 미식별 + 동명 시·군·구 (광주시 / 동구 / 중구 등) → "-"
- *   - 그 외 → 광역만, region fallback, 또는 "-"
- *
- * 동적 import 회피 — municipality 모듈은 domain 의 type 만 import (cycle 없음).
- */
-import {
-  detectMunicipality,
-  detectStandaloneMuniWithSido,
-  AMBIGUOUS_MUNICIPALITIES,
-} from "./municipality";
-
-export function extractRegionLabel(
-  orgName: string | null,
-  region: string | null = null,
-  title: string | null = null,
-): { label: string; sido: Sido | "전국/기타"; muni: string | null; ambiguous: boolean } {
-  const sido = extractSido(orgName, region, title);
+  // 마지막 fallback — 시·군·구 명으로 역추론
+  // (동명: "광주시"·"동구"·"중구"·"고성군" 등은 광역 미상이라 null 반환됨)
   const allText = [region, orgName, title].filter(Boolean).join(" ");
-
-  if (sido !== "전국/기타") {
-    const muni = detectMunicipality(sido, allText);
-    return { label: muni ? `${sido} ${muni}` : sido, sido, muni, ambiguous: false };
+  if (allText) {
+    const found = detectStandaloneMuniWithSido(allText);
+    if (found) return found.sido;
   }
 
-  // 광역 미식별 — 유일 시·군·구 매치 시 그것으로 광역 추론
-  const standalone = detectStandaloneMuniWithSido(allText);
-  if (standalone) {
-    return {
-      label: `${standalone.sido} ${standalone.muni}`,
-      sido: standalone.sido,
-      muni: standalone.muni,
-      ambiguous: false,
-    };
-  }
-
-  // 동명 시·군·구 (광주시, 동구, 중구 등) 만 등장 시 — 광역 미상이라 "-"
-  for (const m of Object.keys(AMBIGUOUS_MUNICIPALITIES)) {
-    if (allText.includes(m)) {
-      return { label: "-", sido: "전국/기타", muni: null, ambiguous: true };
-    }
-  }
-
-  return { label: "-", sido: "전국/기타", muni: null, ambiguous: false };
+  return "전국/기타";
 }
 
 /**

@@ -4,7 +4,7 @@ import { getBidList } from "@/lib/queries/bids";
 import {
   SOURCE_GROUPS,
   SOURCE_LABELS,
-  extractRegionLabel,
+  extractSido,
   dDayLabel,
   normalizeDateStr,
   type SourceGroup,
@@ -50,15 +50,11 @@ export async function GET(req: Request) {
   // limit 50000 — 거의 모든 결과 한 번에. Supabase 한계는 더 높지만 안전 cap.
   const rows = await getBidList(filter, 50000);
 
-  const data = rows.map((r) => {
-    const region = extractRegionLabel(r.org_name, r.region, r.title);
-    return {
+  const data = rows.map((r) => ({
     "공고번호": r.bid_no,
     "제목": r.title,
     "기관": r.org_name ?? "",
-    "지역": region.label,
-    "광역": region.sido,
-    "시·군·구": region.muni ?? "",
+    "지역": extractSido(r.org_name, r.region, r.title),
     "지역(원본)": r.region ?? "",
     "업종": r.bid_type ?? "",
     "금액(원)": r.estimated_price ?? "",
@@ -69,8 +65,7 @@ export async function GET(req: Request) {
     "출처": SOURCE_LABELS[r.source] ?? r.source,
     "영업대표": r.assignees.map((a) => a.rep_name).join(", "),
     "URL": r.detail_url ?? "",
-    };
-  });
+  }));
 
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.json_to_sheet(data);
