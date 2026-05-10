@@ -43,7 +43,12 @@ export async function POST() {
   });
 
   if (r.status === 204) {
-    return NextResponse.json({ ok: true, message: "수집 시작됨 — 5~10분 후 새로고침" });
+    const actionsUrl = `https://github.com/${repo}/actions/workflows/${workflow}`;
+    return NextResponse.json({
+      ok: true,
+      message: "수집 시작됨 (5~10분 후 자동 새로고침)",
+      actions_url: actionsUrl,
+    });
   }
 
   const text = await r.text();
