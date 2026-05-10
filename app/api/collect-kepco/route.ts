@@ -148,7 +148,18 @@ export async function POST(req: Request) {
     });
     if (!r.ok) {
       const txt = await r.text();
-      return NextResponse.json({ ok: false, error: `KEPCO ${r.status}`, body: txt.slice(0, 200), window: { begin, end } });
+      // KEPCO 가 lookback 구간에 데이터 없으면 404 + errMsg:NotFound 반환.
+      // 이건 정상 케이스 (단지 신규 공고 없음) 이므로 ok:true 로 처리.
+      const isNotFound = r.status === 404 && txt.includes("NotFound");
+      return NextResponse.json({
+        ok: isNotFound,
+        fetched: 0,
+        upserted: 0,
+        kepco_status: r.status,
+        body_preview: txt.slice(0, 200),
+        window: { begin, end },
+        note: isNotFound ? "KEPCO lookback 구간에 신규 공고 없음 (정상)" : undefined,
+      });
     }
     const body = await r.json();
     const items: Record<string, unknown>[] = Array.isArray(body?.data)
