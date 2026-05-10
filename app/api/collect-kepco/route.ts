@@ -221,19 +221,19 @@ export async function POST(req: Request) {
     const expected = process.env.COLLECT_SECRET;
     const provided = req.headers.get("x-collect-secret");
     if (expected && provided !== expected) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "unauthorized" }, { status: 200 });
     }
 
     stages.push("env-check");
     const apiKey = process.env.KEPCO_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({ error: "KEPCO_API_KEY 미설정" }, { status: 500 });
+      return NextResponse.json({ error: "KEPCO_API_KEY 미설정" }, { status: 200 });
     }
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      return NextResponse.json({ error: "NEXT_PUBLIC_SUPABASE_URL 미설정" }, { status: 500 });
+      return NextResponse.json({ error: "NEXT_PUBLIC_SUPABASE_URL 미설정" }, { status: 200 });
     }
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY 미설정 (Cloudtype 환경변수 확인)" }, { status: 500 });
+      return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY 미설정 (Cloudtype 환경변수 확인)" }, { status: 200 });
     }
 
     stages.push("kepco-fetch");
@@ -254,7 +254,7 @@ export async function POST(req: Request) {
       const text = await r.text();
       return NextResponse.json(
         { error: `KEPCO ${r.status}`, body: text.slice(0, 300), window: { begin, end } },
-        { status: 502 },
+        { status: 200 },
       );
     }
     stages.push("kepco-parse");
@@ -294,7 +294,7 @@ export async function POST(req: Request) {
     if (error) {
       return NextResponse.json(
         { error: "Supabase upsert", details: error.message, code: error.code, window: { begin, end } },
-        { status: 500 },
+        { status: 200 },
       );
     }
 
@@ -313,7 +313,7 @@ export async function POST(req: Request) {
         message: e instanceof Error ? e.message : String(e),
         stack: e instanceof Error ? e.stack?.split("\n").slice(0, 5).join("\n") : null,
       },
-      { status: 500 },
+      { status: 200 },
     );
   }
 }
