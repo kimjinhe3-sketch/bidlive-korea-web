@@ -143,8 +143,8 @@ export const TAG_LABEL: Record<TagValue, string> = {
   closing: "마감임박",
 };
 
-/** "주목" 컬럼/필터 한국어 이름 — 필요시 한 곳만 수정하면 전체 반영 */
-export const ATTENTION_LABEL = "주목";
+/** "분류" 컬럼/필터 한국어 이름 — 필요시 한 곳만 수정하면 전체 반영 */
+export const ATTENTION_LABEL = "분류";
 
 /** 정렬 가능 컬럼 — DB 컬럼명과 매핑 */
 export const SORTABLE_COLUMNS = {
