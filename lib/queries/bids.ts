@@ -164,19 +164,21 @@ export async function getBidListPaged(
   if (filter.dateFrom) q = q.gte("open_date", filter.dateFrom);
   if (filter.dateTo) q = q.lte("open_date", filter.dateTo);
 
-  // 활성 공고만 — server-side push (close_date NULL 이거나 오늘 이상)
+  // 활성 공고만 — server-side push (close_date NULL 이거나 오늘 이상, KST 기준)
+  // 주의: DB 의 close_date 가 정규화(YYYY-MM-DD)된 상태여야 lex 비교 정상.
+  // LH 슬래시 / D2B 디지트 포맷은 normalize_dates.py 로 일괄 정리됨.
   if (filter.activeOnly) {
-    const today = new Date().toISOString().slice(0, 10);
-    q = q.or(`close_date.is.null,close_date.gte.${today}`);
+    const todayKst = todayKstStr();
+    q = q.or(`close_date.is.null,close_date.gte.${todayKst}`);
   }
 
-  // D-n 임박 — server-side
+  // D-n 임박 — server-side (KST)
   if (filter.closingWithinDays != null && filter.closingWithinDays > 0) {
-    const today = new Date();
-    const limit = new Date(today);
-    limit.setDate(limit.getDate() + filter.closingWithinDays);
-    q = q.gte("close_date", today.toISOString().slice(0, 10))
-         .lte("close_date", limit.toISOString().slice(0, 10));
+    const todayKst = todayKstStr();
+    const [y, m, d] = todayKst.split("-").map(Number);
+    const limitDate = new Date(Date.UTC(y, m - 1, d + filter.closingWithinDays));
+    const limitKst = limitDate.toISOString().slice(0, 10);
+    q = q.gte("close_date", todayKst).lte("close_date", limitKst);
   }
 
   // 금액 — server-side
@@ -263,6 +265,13 @@ export async function getBidListPaged(
 }
 
 // ───────────────────── helpers ─────────────────────
+
+/** KST 기준 오늘 — "YYYY-MM-DD" 반환. 자정 직후 UTC 가 어제인 경우 보정. */
+function todayKstStr(): string {
+  const now = new Date();
+  const kst = new Date(now.getTime() + 9 * 3600 * 1000);
+  return kst.toISOString().slice(0, 10);
+}
 
 function startOfDayKstIso(): string {
   const now = new Date();

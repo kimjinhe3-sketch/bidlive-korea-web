@@ -7,6 +7,7 @@ import {
   isClosingSoon,
   extractRegionLabel,
   dDayLabel,
+  normalizeDateStr,
   SOURCE_LABELS,
   ATTENTION_LABEL,
   type SortColumn,
@@ -240,12 +241,12 @@ function BidRow({ row }: { row: BidWithAssignees }) {
 
       {/* 마감일 */}
       <td className="px-2 py-2 align-top text-center text-xs text-kt-dark-gray num">
-        {row.close_date ? row.close_date.slice(0, 10) : "-"}
+        {normalizeDateStr(row.close_date) ?? "-"}
       </td>
 
       {/* 공고일 */}
       <td className="px-2 py-2 align-top text-center text-xs text-kt-dark-gray num">
-        {row.open_date ? row.open_date.slice(0, 10) : "-"}
+        {normalizeDateStr(row.open_date) ?? "-"}
       </td>
 
       {/* 출처 */}

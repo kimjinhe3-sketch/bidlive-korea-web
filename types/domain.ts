@@ -181,16 +181,47 @@ export function ddayTone(dday: string | null): DdayTone | null {
 }
 
 /**
+ * 다양한 포맷의 날짜 문자열 → "YYYY-MM-DD" 정규화.
+ *   - "2026-05-11 12:00:00" → "2026-05-11"
+ *   - "2026/05/04 10:00"    → "2026-05-04" (LH)
+ *   - "20260511"            → "2026-05-11" (D2B 8자리)
+ *   - "202605111100"        → "2026-05-11" (D2B 12자리)
+ *   - "20220919000000"      → "2022-09-19" (KEPCO 14자리 레거시)
+ * 매치 안 되면 null.
+ */
+export function normalizeDateStr(s: string | null | undefined): string | null {
+  if (!s) return null;
+  const t = s.trim();
+  if (!t) return null;
+  // 8+자리 숫자 (디지트 포맷)
+  if (/^\d{8}/.test(t)) {
+    return `${t.slice(0, 4)}-${t.slice(4, 6)}-${t.slice(6, 8)}`;
+  }
+  // YYYY[-/.]MM[-/.]DD
+  const m = t.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (m) {
+    const [, y, mo, d] = m;
+    return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+  return null;
+}
+
+/** KST 자정 — Date 객체. 시각이 자정으로 세팅된 KST today. */
+function todayMidnightKst(today: Date = new Date()): Date {
+  const kst = new Date(today.getTime() + 9 * 3600 * 1000);
+  const ymd = kst.toISOString().slice(0, 10);
+  return new Date(`${ymd}T00:00:00Z`);  // UTC midnight of the KST date — diff 계산용
+}
+
+/**
  * "신규" 정의: 입찰 공고일(open_date) 이 오늘/어제/그제 (3일 이내).
- * 이전: created_at 기준 → 변경됨.
  */
 export function isFreshOpen(openDate: string | null, today: Date = new Date()): boolean {
-  if (!openDate) return false;
-  const open = new Date(openDate.slice(0, 10));
-  const todayMidnight = new Date(today);
-  todayMidnight.setHours(0, 0, 0, 0);
-  const diffMs = todayMidnight.getTime() - open.getTime();
-  const diff = Math.round(diffMs / (1000 * 60 * 60 * 24));
+  const norm = normalizeDateStr(openDate);
+  if (!norm) return false;
+  const open = new Date(`${norm}T00:00:00Z`);
+  const todayUtc = todayMidnightKst(today);
+  const diff = Math.round((todayUtc.getTime() - open.getTime()) / 86400000);
   return diff >= 0 && diff <= 2;  // 0=오늘, 1=어제, 2=그제
 }
 
@@ -198,12 +229,11 @@ export function isFreshOpen(openDate: string | null, today: Date = new Date()): 
  * "마감 임박" 정의: D-day, D-1, D-2 (3일 이내 마감).
  */
 export function isClosingSoon(closeDate: string | null, today: Date = new Date()): boolean {
-  if (!closeDate) return false;
-  const close = new Date(closeDate.slice(0, 10));
-  const todayMidnight = new Date(today);
-  todayMidnight.setHours(0, 0, 0, 0);
-  const diffMs = close.getTime() - todayMidnight.getTime();
-  const diff = Math.round(diffMs / (1000 * 60 * 60 * 24));
+  const norm = normalizeDateStr(closeDate);
+  if (!norm) return false;
+  const close = new Date(`${norm}T00:00:00Z`);
+  const todayUtc = todayMidnightKst(today);
+  const diff = Math.round((close.getTime() - todayUtc.getTime()) / 86400000);
   return diff >= 0 && diff <= 2;
 }
 
@@ -212,11 +242,11 @@ export function isClosingSoon(closeDate: string | null, today: Date = new Date()
  * 클라이언트 컴포넌트에서도 import 할 수 있도록 도메인 유틸에 위치.
  */
 export function dDayLabel(closeDate: string | null, today: Date = new Date()): string | null {
-  if (!closeDate) return null;
-  const close = new Date(closeDate.slice(0, 10));
-  const todayMidnight = new Date(today);
-  todayMidnight.setHours(0, 0, 0, 0);
-  const diff = Math.round((close.getTime() - todayMidnight.getTime()) / 86400000);
+  const norm = normalizeDateStr(closeDate);
+  if (!norm) return null;
+  const close = new Date(`${norm}T00:00:00Z`);
+  const todayUtc = todayMidnightKst(today);
+  const diff = Math.round((close.getTime() - todayUtc.getTime()) / 86400000);
   if (diff < 0) return "마감";
   if (diff === 0) return "D-day";
   if (diff <= 7) return `D-${diff}`;
