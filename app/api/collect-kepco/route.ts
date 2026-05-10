@@ -205,7 +205,7 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    version: "diag-c7cd012+",
+    version: "diag-minimal-v1",
     env,
     admin,
     regionCheck,
@@ -214,7 +214,15 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  // 모든 단계 try/catch — 어디서 실패하든 JSON 응답 보장 (Cloudtype 502 회피)
+  // 임시 진단 — 모든 로직 skip. POST 자체가 도달하는지만 확인.
+  return NextResponse.json({
+    ok: true,
+    diag: "minimal-post-handler-v1",
+    reached: new Date().toISOString(),
+    has_secret_header: !!req.headers.get("x-collect-secret"),
+  });
+  // ↓ 진단 끝나면 위 return 지우고 아래 원래 로직 사용
+  // eslint-disable-next-line no-unreachable
   const stages: string[] = [];
   try {
     stages.push("auth");
