@@ -108,18 +108,12 @@ export default async function BidsPage({ searchParams }: PageProps) {
       {/* 3. 필터 툴바 — 표 위 한 줄 */}
       <BidFilterToolbar />
 
-      {/* 4. 소스 segment + 결과 카운트 + 테이블 + 페이지네이션 */}
+      {/* 4. 소스 segment + 페이지네이션 (표 위) + 테이블 */}
       <section className="space-y-3">
+        {/* 한 줄: 좌=탭 / 우=결과 카운트 + 페이지당 + 페이지 네비 */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <BidSourceTabs />
-          <span className="text-xs font-medium text-kt-dark-gray">
-            결과 총 <span className="font-bold text-kt-black num">{total.toLocaleString("ko-KR")}</span>건
-            {total > pageSize && (
-              <span className="ml-1 text-[11px] text-kt-light-gray">
-                ({pageNum} / {Math.ceil(total / pageSize)} 페이지)
-              </span>
-            )}
-          </span>
+          <BidPagination total={total} pageSize={pageSize} pageNum={pageNum} />
         </div>
         <BidTable
           rows={rows}
@@ -127,7 +121,6 @@ export default async function BidsPage({ searchParams }: PageProps) {
           dir={sortDir ?? null}
           searchParams={sp}
         />
-        <BidPagination total={total} pageSize={pageSize} pageNum={pageNum} />
       </section>
     </div>
   );

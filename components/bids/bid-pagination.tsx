@@ -39,11 +39,17 @@ export function BidPagination({
   const end = Math.min(safePage * pageSize, total);
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 mt-3 px-1">
-      {/* 좌: 페이지 사이즈 + 카운트 */}
+    <div className="flex flex-wrap items-center gap-3">
+      {/* 결과 카운트 + 페이지당 셀렉터 */}
       <div className="flex items-center gap-3 text-xs text-kt-dark-gray">
-        <span>
-          페이지당:
+        <span className="font-medium">
+          결과 총 <span className="font-bold text-kt-black num">{total.toLocaleString("ko-KR")}</span>건
+        </span>
+        <span className="text-kt-light-gray num">
+          {start.toLocaleString("ko-KR")} – {end.toLocaleString("ko-KR")}
+        </span>
+        <span className="flex items-center">
+          페이지당
           <select
             value={pageSize}
             onChange={(e) => {
@@ -56,12 +62,9 @@ export function BidPagination({
             ))}
           </select>
         </span>
-        <span className="text-kt-light-gray num">
-          {start.toLocaleString("ko-KR")} – {end.toLocaleString("ko-KR")} / {total.toLocaleString("ko-KR")}
-        </span>
       </div>
 
-      {/* 우: 페이지 네비 */}
+      {/* 페이지 네비 */}
       <div className="flex items-center gap-0.5">
         <NavBtn href={buildHref(1)} disabled={safePage <= 1} title="처음">
           <ChevronsLeft className="h-3.5 w-3.5" />

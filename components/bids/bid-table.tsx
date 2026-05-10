@@ -43,7 +43,7 @@ export function BidTable({
 
   return (
     <div className="rounded-lg border border-kt-light-gray/40 bg-white overflow-hidden">
-      <div className="max-h-[calc(100vh-340px)] min-h-[480px] overflow-auto">
+      <div className="max-h-[calc(100vh-300px)] min-h-[480px] overflow-auto">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-white border-b border-kt-light-gray/40 z-10">
             <tr className="text-[11px] font-bold uppercase tracking-wider text-kt-dark-gray">
