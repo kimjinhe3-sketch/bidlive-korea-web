@@ -149,22 +149,66 @@ function extractItems(body: unknown): Record<string, unknown>[] {
 }
 
 /**
- * 진단용 GET — 인증 없이 호출 가능, 환경변수 존재 여부만 노출 (값 자체는 X).
- * 배포 확인 + 누락 변수 식별용.
+ * 진단용 GET — env 변수 + Supabase admin client + 단순 SELECT 테스트.
  */
 export async function GET() {
+  // 1) env
+  const env = {
+    KEPCO_API_KEY:             !!process.env.KEPCO_API_KEY,
+    COLLECT_SECRET:            !!process.env.COLLECT_SECRET,
+    NEXT_PUBLIC_SUPABASE_URL:  !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    SERVICE_ROLE_LEN:          process.env.SUPABASE_SERVICE_ROLE_KEY?.length ?? 0,
+  };
+
+  // 2) admin client + 단순 SELECT
+  let admin: Record<string, unknown> = { tested: false };
+  try {
+    const supabase = createAdminClient();
+    admin = { ...admin, tested: true, client_created: true };
+    const start = Date.now();
+    const { count, error } = await supabase
+      .from("bid_announcements")
+      .select("*", { count: "exact", head: true });
+    admin = {
+      ...admin,
+      query_ms: Date.now() - start,
+      total_count: count ?? null,
+      error: error ? { message: error.message, code: error.code, details: error.details } : null,
+    };
+  } catch (e) {
+    admin = {
+      ...admin,
+      exception: e instanceof Error ? e.message : String(e),
+      stack: e instanceof Error ? e.stack?.split("\n").slice(0, 3).join("\n") : null,
+    };
+  }
+
+  // 3) region 컬럼 존재 여부 (선택 한 row 의 region 필드 확인)
+  let regionCheck: Record<string, unknown> = { tested: false };
+  try {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from("bid_announcements")
+      .select("id,region")
+      .limit(1);
+    regionCheck = {
+      tested: true,
+      error: error ? error.message : null,
+      sample: data && data.length > 0 ? data[0] : null,
+    };
+  } catch (e) {
+    regionCheck = {
+      tested: true,
+      exception: e instanceof Error ? e.message : String(e),
+    };
+  }
+
   return NextResponse.json({
-    version: "d7870c8+",
-    env: {
-      KEPCO_API_KEY:               { set: !!process.env.KEPCO_API_KEY,
-                                     length: process.env.KEPCO_API_KEY?.length ?? 0 },
-      COLLECT_SECRET:              { set: !!process.env.COLLECT_SECRET,
-                                     length: process.env.COLLECT_SECRET?.length ?? 0 },
-      NEXT_PUBLIC_SUPABASE_URL:    { set: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
-                                     length: process.env.NEXT_PUBLIC_SUPABASE_URL?.length ?? 0 },
-      SUPABASE_SERVICE_ROLE_KEY:   { set: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-                                     length: process.env.SUPABASE_SERVICE_ROLE_KEY?.length ?? 0 },
-    },
+    version: "diag-c7cd012+",
+    env,
+    admin,
+    regionCheck,
     node: process.version,
   });
 }
