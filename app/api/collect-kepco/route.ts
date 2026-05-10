@@ -149,89 +149,106 @@ function extractItems(body: unknown): Record<string, unknown>[] {
 }
 
 export async function POST(req: Request) {
-  // 1) 인증 — shared secret
-  const expected = process.env.COLLECT_SECRET;
-  const provided = req.headers.get("x-collect-secret");
-  if (expected && provided !== expected) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
-
-  const apiKey = process.env.KEPCO_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json({ error: "KEPCO_API_KEY 환경변수 미설정" }, { status: 500 });
-  }
-
-  const lookback = Math.max(1, Math.min(90, Number(req.headers.get("x-lookback-days") ?? "14")));
-  const { begin, end } = dateRange(lookback);
-
-  // 2) KEPCO 호출
-  const url = new URL(KEPCO_BASE_URL);
-  url.searchParams.set("apiKey", apiKey);
-  url.searchParams.set("noticeBeginDate", begin);
-  url.searchParams.set("noticeEndDate", end);
-  url.searchParams.set("returnType", "json");
-
-  let body: unknown;
+  // 모든 단계 try/catch — 어디서 실패하든 JSON 응답 보장 (Cloudtype 502 회피)
+  const stages: string[] = [];
   try {
+    stages.push("auth");
+    const expected = process.env.COLLECT_SECRET;
+    const provided = req.headers.get("x-collect-secret");
+    if (expected && provided !== expected) {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
+
+    stages.push("env-check");
+    const apiKey = process.env.KEPCO_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json({ error: "KEPCO_API_KEY 미설정" }, { status: 500 });
+    }
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      return NextResponse.json({ error: "NEXT_PUBLIC_SUPABASE_URL 미설정" }, { status: 500 });
+    }
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY 미설정 (Cloudtype 환경변수 확인)" }, { status: 500 });
+    }
+
+    stages.push("kepco-fetch");
+    const lookback = Math.max(1, Math.min(90, Number(req.headers.get("x-lookback-days") ?? "14")));
+    const { begin, end } = dateRange(lookback);
+    const url = new URL(KEPCO_BASE_URL);
+    url.searchParams.set("apiKey", apiKey);
+    url.searchParams.set("noticeBeginDate", begin);
+    url.searchParams.set("noticeEndDate", end);
+    url.searchParams.set("returnType", "json");
+
     const r = await fetch(url.toString(), {
       headers: { "User-Agent": UA, Accept: "*/*" },
       cache: "no-store",
+      signal: AbortSignal.timeout(30000),
     });
     if (!r.ok) {
       const text = await r.text();
       return NextResponse.json(
-        { error: `KEPCO ${r.status}: ${text.slice(0, 300)}` },
+        { error: `KEPCO ${r.status}`, body: text.slice(0, 300), window: { begin, end } },
         { status: 502 },
       );
     }
-    body = await r.json();
-  } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "KEPCO fetch failed" },
-      { status: 502 },
-    );
-  }
+    stages.push("kepco-parse");
+    const body = await r.json();
 
-  // 3) Normalize + dedupe
-  const items = extractItems(body);
-  const seen = new Set<string>();
-  const rows: NormalizedRow[] = [];
-  for (const it of items) {
-    const n = normalize(it);
-    if (n && !seen.has(n.bid_no)) {
-      seen.add(n.bid_no);
-      rows.push(n);
+    stages.push("normalize");
+    const items = extractItems(body);
+    const seen = new Set<string>();
+    const rows: NormalizedRow[] = [];
+    for (const it of items) {
+      const n = normalize(it);
+      if (n && !seen.has(n.bid_no)) {
+        seen.add(n.bid_no);
+        rows.push(n);
+      }
     }
-  }
 
-  if (rows.length === 0) {
+    if (rows.length === 0) {
+      return NextResponse.json({
+        ok: true,
+        fetched: 0,
+        upserted: 0,
+        window: { begin, end },
+        items_raw: items.length,
+        note: "KEPCO 응답에 lookback 구간 데이터 없음",
+      });
+    }
+
+    stages.push("admin-client");
+    const supabase = createAdminClient();
+
+    stages.push("upsert");
+    const { error } = await supabase
+      .from("bid_announcements")
+      .upsert(rows as never, { onConflict: "source,bid_no" });
+
+    if (error) {
+      return NextResponse.json(
+        { error: "Supabase upsert", details: error.message, code: error.code, window: { begin, end } },
+        { status: 500 },
+      );
+    }
+
     return NextResponse.json({
       ok: true,
-      fetched: 0,
-      upserted: 0,
+      fetched: rows.length,
+      upserted: rows.length,
       window: { begin, end },
-      note: "KEPCO 응답에 lookback 구간 데이터 없음",
     });
-  }
-
-  // 4) Supabase upsert (admin = service_role, RLS bypass)
-  const supabase = createAdminClient();
-  // 타입 정의가 admin client 에 완전히 따라잡지 못하는 케이스 — 명시 cast.
-  const { error } = await supabase
-    .from("bid_announcements")
-    .upsert(rows as never, { onConflict: "source,bid_no" });
-
-  if (error) {
+  } catch (e) {
     return NextResponse.json(
-      { error: `Supabase upsert: ${error.message}` },
+      {
+        error: "unhandled exception",
+        stage: stages[stages.length - 1] ?? "init",
+        stages_done: stages,
+        message: e instanceof Error ? e.message : String(e),
+        stack: e instanceof Error ? e.stack?.split("\n").slice(0, 5).join("\n") : null,
+      },
       { status: 500 },
     );
   }
-
-  return NextResponse.json({
-    ok: true,
-    fetched: rows.length,
-    upserted: rows.length,
-    window: { begin, end },
-  });
 }
