@@ -8,6 +8,7 @@ import {
   useCallback,
   useMemo,
   type ReactNode,
+  type CompositionEvent,
 } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import {
@@ -106,13 +107,12 @@ export function BidFilterToolbar() {
         pending && "opacity-70",
       )}
     >
-      {/* 검색 — 항상 노출 */}
+      {/* 검색 — 항상 노출 (한글 IME 안전 + 350ms debounce) */}
       <div className="relative w-[260px] shrink-0">
         <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-kt-light-gray" />
-        <input
-          type="text"
+        <DebouncedInput
           value={get("q")}
-          onChange={(e) => setMany({ q: e.target.value })}
+          onCommit={(v) => setMany({ q: v || null })}
           placeholder="제목 검색 (예: 전기공사)"
           className="w-full rounded-md border border-kt-light-gray/40 bg-white pl-7 pr-7 py-1.5 text-sm placeholder:text-kt-light-gray focus:border-kt-red focus:outline-none focus:ring-2 focus:ring-kt-red/15"
         />
@@ -162,12 +162,11 @@ export function BidFilterToolbar() {
         valueText={orgKw || null}
         badge={orgKw ? 1 : 0}
       >
-        <input
-          type="text"
-          autoFocus
+        <DebouncedInput
           value={orgKw}
-          onChange={(e) => setMany({ org: e.target.value })}
+          onCommit={(v) => setMany({ org: v || null })}
           placeholder="예: 교육청"
+          autoFocus
           className="w-full rounded border border-kt-light-gray/40 bg-white px-2 py-1.5 text-sm focus:border-kt-red focus:outline-none focus:ring-2 focus:ring-kt-red/15"
         />
       </FilterChip>
@@ -248,13 +247,13 @@ export function BidFilterToolbar() {
             placeholder="포함 (콤마)  예: 정보통신, 전기, 통신"
             tone="include"
             value={inc}
-            onChange={(v) => setMany({ inc: v })}
+            onCommit={(v) => setMany({ inc: v || null })}
           />
           <KwTextarea
             placeholder="제외 (콤마)  예: 청소, 식자재"
             tone="exclude"
             value={exc}
-            onChange={(v) => setMany({ exc: v })}
+            onCommit={(v) => setMany({ exc: v || null })}
           />
         </div>
       </FilterChip>
@@ -495,19 +494,19 @@ function DateInput({
 
 function KwTextarea({
   value,
-  onChange,
+  onCommit,
   placeholder,
   tone,
 }: {
   value: string;
-  onChange: (v: string) => void;
+  onCommit: (v: string) => void;
   placeholder?: string;
   tone: "include" | "exclude";
 }) {
   return (
-    <textarea
+    <DebouncedTextarea
       value={value}
-      onChange={(e) => onChange(e.target.value)}
+      onCommit={onCommit}
       placeholder={placeholder}
       rows={2}
       className={cn(
@@ -516,6 +515,136 @@ function KwTextarea({
           ? "border-kt-blue/20 focus:border-kt-blue focus:ring-kt-blue/15"
           : "border-kt-light-gray/40 focus:border-kt-dark-gray focus:ring-kt-light-gray/30",
       )}
+    />
+  );
+}
+
+/* ────────────────────────────────────────────────
+ * 한글 IME 안전한 debounced input / textarea
+ *  - 350ms debounce — 타이핑 멈춘 후에만 onCommit
+ *  - composition (한글 조합) 중엔 commit 보류, 끝나면 즉시 commit
+ *  - 외부 value 변경 시 자체적으로 동기화
+ * ──────────────────────────────────────────────── */
+
+function DebouncedInput({
+  value,
+  onCommit,
+  delay = 350,
+  placeholder,
+  className,
+  autoFocus,
+}: {
+  value: string;
+  onCommit: (v: string) => void;
+  delay?: number;
+  placeholder?: string;
+  className?: string;
+  autoFocus?: boolean;
+}) {
+  const [local, setLocal] = useState(value);
+  const composingRef = useRef(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastCommittedRef = useRef(value);
+
+  useEffect(() => {
+    if (value !== lastCommittedRef.current) {
+      setLocal(value);
+      lastCommittedRef.current = value;
+    }
+  }, [value]);
+
+  function schedule(v: string) {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      if (!composingRef.current) {
+        lastCommittedRef.current = v;
+        onCommit(v);
+      }
+    }, delay);
+  }
+
+  return (
+    <input
+      type="text"
+      value={local}
+      autoFocus={autoFocus}
+      placeholder={placeholder}
+      className={className}
+      onChange={(e) => {
+        setLocal(e.target.value);
+        schedule(e.target.value);
+      }}
+      onCompositionStart={() => {
+        composingRef.current = true;
+      }}
+      onCompositionEnd={(e: CompositionEvent<HTMLInputElement>) => {
+        composingRef.current = false;
+        if (timerRef.current) clearTimeout(timerRef.current);
+        const v = (e.target as HTMLInputElement).value;
+        lastCommittedRef.current = v;
+        onCommit(v);
+      }}
+    />
+  );
+}
+
+function DebouncedTextarea({
+  value,
+  onCommit,
+  delay = 350,
+  placeholder,
+  rows,
+  className,
+}: {
+  value: string;
+  onCommit: (v: string) => void;
+  delay?: number;
+  placeholder?: string;
+  rows?: number;
+  className?: string;
+}) {
+  const [local, setLocal] = useState(value);
+  const composingRef = useRef(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastCommittedRef = useRef(value);
+
+  useEffect(() => {
+    if (value !== lastCommittedRef.current) {
+      setLocal(value);
+      lastCommittedRef.current = value;
+    }
+  }, [value]);
+
+  function schedule(v: string) {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      if (!composingRef.current) {
+        lastCommittedRef.current = v;
+        onCommit(v);
+      }
+    }, delay);
+  }
+
+  return (
+    <textarea
+      value={local}
+      placeholder={placeholder}
+      rows={rows}
+      className={className}
+      onChange={(e) => {
+        setLocal(e.target.value);
+        schedule(e.target.value);
+      }}
+      onCompositionStart={() => {
+        composingRef.current = true;
+      }}
+      onCompositionEnd={(e: CompositionEvent<HTMLTextAreaElement>) => {
+        composingRef.current = false;
+        if (timerRef.current) clearTimeout(timerRef.current);
+        const v = (e.target as HTMLTextAreaElement).value;
+        lastCommittedRef.current = v;
+        onCommit(v);
+      }}
     />
   );
 }

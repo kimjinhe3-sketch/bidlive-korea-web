@@ -99,7 +99,9 @@ export function BidAssigneeCell({
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") commit();
+                // IME 조합 중인 Enter 는 IME 의 commit 으로 흘려보냄
+                // (그 다음 Enter 가 실제 추가 액션)
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) commit();
                 if (e.key === "Escape") setOpen(false);
               }}
               placeholder="이름 입력 후 Enter"
