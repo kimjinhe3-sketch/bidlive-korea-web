@@ -1,9 +1,11 @@
+import { BrandLogo } from "./brand-logo";
+
 /**
- * 상단 헤더 (DESIGN_SYSTEM 5-2).
- *  - 높이 64px
- *  - 배경 white, 하단 1px 보더
- *  - 모바일에선 좌측 워드마크 노출 (사이드바 hidden)
- *  - public 모드라 우측 사용자 정보 없음
+ * 글로벌 톱바 — 사이드바 제거 후 단일 네비게이션.
+ *  - 높이 48px (h-12), KT BLACK 배경
+ *  - 좌측: KT engineering CI 로고 + BIDLIVE 부제
+ *  - 우측: 마지막 수집 시각 (LIVE dot)
+ *  - sticky top-0
  */
 export function Header({
   lastCollectedAt,
@@ -11,17 +13,15 @@ export function Header({
   lastCollectedAt: string | null;
 }) {
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-kt-light-gray/40 bg-white px-4 lg:px-6">
-      <div className="flex items-center gap-3 lg:hidden">
-        <span className="text-base font-bold text-kt-black">
-          kt <span className="text-kt-red">engineering</span>
-        </span>
-        <span className="text-[11px] tracking-wide font-medium text-kt-light-gray">
-          BIDLIVE
+    <header className="sticky top-0 z-30 flex h-12 items-center justify-between border-b border-white/10 bg-kt-black px-4 lg:px-6">
+      <div className="flex items-center gap-3">
+        <BrandLogo variant="dark" size="sm" withSubtitle={false} />
+        <span className="text-[11px] tracking-wide font-medium text-white/60 hidden sm:inline">
+          BIDLIVE Korea
         </span>
       </div>
 
-      <div className="ml-auto flex items-center gap-2">
+      <div className="flex items-center gap-2">
         <LiveStatus lastCollectedAt={lastCollectedAt} />
       </div>
     </header>
@@ -31,15 +31,15 @@ export function Header({
 function LiveStatus({ lastCollectedAt }: { lastCollectedAt: string | null }) {
   const text = formatRelative(lastCollectedAt);
   return (
-    <div className="inline-flex items-center gap-2 rounded-full border border-kt-light-gray/40 bg-white px-3 py-1.5">
+    <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1">
       <span className="relative inline-flex h-2 w-2">
         <span className="absolute inline-flex h-full w-full rounded-full bg-kt-teal opacity-60 animate-ping" />
         <span className="relative inline-flex h-2 w-2 rounded-full bg-kt-teal" />
       </span>
-      <span className="text-[11px] font-bold tracking-widest uppercase text-kt-light-gray">
+      <span className="text-[10px] font-bold tracking-widest uppercase text-white/50">
         Last collect
       </span>
-      <span className="text-xs font-bold text-kt-black num">{text}</span>
+      <span className="text-xs font-bold text-white num">{text}</span>
     </div>
   );
 }

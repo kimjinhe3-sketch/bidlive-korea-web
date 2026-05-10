@@ -1,6 +1,4 @@
-import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
-import { BottomNav } from "@/components/layout/bottom-nav";
 import { getBidKpis } from "@/lib/queries/bids";
 
 export const dynamic = "force-dynamic";
@@ -20,15 +18,11 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar />
-      <div className="flex-1 flex flex-col min-w-0">
-        <Header lastCollectedAt={lastCollectedAt} />
-        <main className="flex-1 px-4 lg:px-6 py-5 lg:py-6 max-w-[1880px] w-full mx-auto">
-          {children}
-        </main>
-        <BottomNav />
-      </div>
+    <div className="flex min-h-screen flex-col bg-background">
+      <Header lastCollectedAt={lastCollectedAt} />
+      <main className="flex-1 px-4 lg:px-6 py-5 lg:py-6 max-w-[1880px] w-full mx-auto">
+        {children}
+      </main>
     </div>
   );
 }
