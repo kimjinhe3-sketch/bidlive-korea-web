@@ -93,11 +93,13 @@ const GROUP_META: Record<SourceGroup, { icon: LucideIcon; tone: string; bar: str
 function GroupCard({ item }: { item: BidKpiBreakdown }) {
   const meta = GROUP_META[item.group];
   const Icon = meta.icon;
+  // 큰 숫자 = active (카드 클릭 후 리스트 카운트와 일치). 누적은 부제로.
+  const showCumulative = item.total !== item.active;
   return (
     <Link
       href={`/bids?group=${encodeURIComponent(item.group)}`}
       className="group relative overflow-hidden rounded-lg border border-kt-light-gray/40 bg-white p-4 hover:shadow-sm hover:border-kt-light-gray transition-all"
-      title={`${item.group} 그룹 리스트로 이동`}
+      title={`${item.group} 활성 ${item.active.toLocaleString("ko-KR")}건 · 누적 ${item.total.toLocaleString("ko-KR")}건`}
     >
       <div className={cn("absolute left-0 top-0 bottom-0 w-0.5", meta.bar)} />
       <div className={cn("flex items-center gap-1.5 text-[11px] font-bold tracking-wider uppercase", meta.tone)}>
@@ -109,23 +111,30 @@ function GroupCard({ item }: { item: BidKpiBreakdown }) {
         <span
           className={cn(
             "text-2xl font-black num leading-none tracking-tight",
-            item.total === 0 ? "text-kt-light-gray" : "text-kt-black",
+            item.active === 0 ? "text-kt-light-gray" : "text-kt-black",
           )}
         >
-          {item.total.toLocaleString("ko-KR")}
+          {item.active.toLocaleString("ko-KR")}
         </span>
         <span className="text-xs font-bold text-kt-dark-gray">건</span>
       </div>
-      <div className="mt-1 text-[11px] text-kt-light-gray">
-        오늘{" "}
-        <span
-          className={cn(
-            "font-bold num",
-            item.today > 0 ? "text-kt-red" : "text-kt-light-gray",
-          )}
-        >
-          +{item.today.toLocaleString("ko-KR")}
+      <div className="mt-1 text-[11px] text-kt-light-gray flex items-center gap-2">
+        <span>
+          오늘{" "}
+          <span
+            className={cn(
+              "font-bold num",
+              item.today > 0 ? "text-kt-red" : "text-kt-light-gray",
+            )}
+          >
+            +{item.today.toLocaleString("ko-KR")}
+          </span>
         </span>
+        {showCumulative && (
+          <span className="text-kt-light-gray/80">
+            · 누적 <span className="num">{item.total.toLocaleString("ko-KR")}</span>
+          </span>
+        )}
       </div>
     </Link>
   );

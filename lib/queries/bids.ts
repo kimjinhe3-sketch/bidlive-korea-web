@@ -20,12 +20,18 @@ import type { BidAnnouncement, BidAssignee } from "@/types/database";
 export interface BidKpiBreakdown {
   group: SourceGroup;
   today: number;
+  /** 활성 공고 (close_date NULL or 오늘 이후) — KPI 카드 클릭 시 리스트 카운트와 일치 */
+  active: number;
+  /** DB 누적 (마감 포함) — "누적 N" 부제 표시용 */
   total: number;
 }
 
 export interface BidKpiSummary {
   todayTotal: number;
+  /** DB 누적 합계 (모든 source × 마감 포함) */
   total: number;
+  /** 활성 합계 (모든 source × 활성만) — TODAY 카드 외 사용처 미정 */
+  activeTotal: number;
   byGroup: BidKpiBreakdown[];
   lastCollectedAt: string | null;
 }
@@ -45,32 +51,41 @@ export async function getBidKpis(): Promise<BidKpiSummary> {
       .maybeSingle(),
   ]);
 
+  // view 가 active 컬럼 없는 구버전 (마이그레이션 미실행) 일 수도 있어서 optional 처리
   const counts =
-    (countsRes.data as { source: string; total: number; today: number }[] | null) ?? [];
+    (countsRes.data as { source: string; total: number; active?: number; today: number }[] | null) ?? [];
 
-  // source → {total, today}
-  const byKey = new Map<string, { total: number; today: number }>();
-  for (const r of counts) byKey.set(r.source, { total: Number(r.total), today: Number(r.today) });
+  // source → {total, active, today}
+  const byKey = new Map<string, { total: number; active: number; today: number }>();
+  for (const r of counts) {
+    byKey.set(r.source, {
+      total: Number(r.total),
+      active: Number(r.active ?? r.total),  // active 미존재 시 total 로 fallback
+      today: Number(r.today),
+    });
+  }
 
   const byGroup: BidKpiBreakdown[] = SOURCE_GROUP_ORDER.map((g) => {
-    let total = 0, today = 0;
+    let total = 0, active = 0, today = 0;
     for (const s of SOURCE_GROUPS[g]) {
       const v = byKey.get(s);
-      if (v) { total += v.total; today += v.today; }
+      if (v) { total += v.total; active += v.active; today += v.today; }
     }
-    return { group: g, total, today };
+    return { group: g, total, active, today };
   });
 
   // 전체 합계
-  let totalSum = 0, todaySum = 0;
+  let totalSum = 0, activeSum = 0, todaySum = 0;
   for (const v of byKey.values()) {
     totalSum += v.total;
+    activeSum += v.active;
     todaySum += v.today;
   }
 
   return {
     todayTotal: todaySum,
     total: totalSum,
+    activeTotal: activeSum,
     byGroup,
     lastCollectedAt: (lastRow.data as { created_at: string } | null)?.created_at ?? null,
   };
