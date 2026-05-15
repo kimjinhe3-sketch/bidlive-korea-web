@@ -73,12 +73,16 @@ export async function GET(req: Request) {
 
   const buffer: ArrayBuffer = XLSX.write(wb, { type: "array", bookType: "xlsx" });
   const today = new Date().toISOString().slice(0, 10);
+  const filename = `공공입찰_${today}_${rows.length}.xlsx`;
+  // RFC 5987: 한글 파일명은 UTF-8 percent-encoded 의 filename* 필요. ASCII fallback 도 같이.
+  const fallbackAscii = `bidlive_${today}_${rows.length}.xlsx`;
+  const filenameStar = `filename*=UTF-8''${encodeURIComponent(filename)}`;
 
   return new NextResponse(buffer, {
     status: 200,
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="bidlive_${today}_${rows.length}.xlsx"`,
+      "Content-Disposition": `attachment; filename="${fallbackAscii}"; ${filenameStar}`,
       "Cache-Control": "no-store",
     },
   });

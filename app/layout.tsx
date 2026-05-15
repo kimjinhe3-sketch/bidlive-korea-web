@@ -23,12 +23,12 @@ const notoSansKR = Noto_Sans_KR({
 });
 
 export const metadata: Metadata = {
-  title: "BIDLIVE Korea | 국내 입찰공고 대시보드",
-  description: "KT Engineering — 국내 입찰공고 일별 수집 및 분석 대시보드",
-  applicationName: "BIDLIVE Korea",
+  title: "공공입찰 수집 시스템",
+  description: "KT Engineering — 국내 공공입찰 공고 일별 자동 수집·분석 대시보드",
+  applicationName: "공공입찰 수집 시스템",
   icons: {
-    icon: "/logos/kt-engineering-light.png",
-    apple: "/logos/kt-engineering-light.png",
+    icon: "/favicon.svg",
+    apple: "/favicon.svg",
   },
 };
 

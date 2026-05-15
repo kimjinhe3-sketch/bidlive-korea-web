@@ -3,7 +3,7 @@ import { BrandLogo } from "./brand-logo";
 /**
  * 글로벌 톱바 — 사이드바 제거 후 단일 네비게이션.
  *  - 높이 48px (h-12), KT BLACK 배경
- *  - 좌측: KT engineering CI 로고 + BIDLIVE 부제
+ *  - 좌측: KT engineering CI 로고 + "공공입찰 수집 시스템" 부제
  *  - 우측: 마지막 수집 시각 (LIVE dot)
  *  - sticky top-0
  */
@@ -17,7 +17,7 @@ export function Header({
       <div className="flex items-center gap-3">
         <BrandLogo variant="dark" size="sm" withSubtitle={false} />
         <span className="text-[11px] tracking-wide font-medium text-white/60 hidden sm:inline">
-          BIDLIVE Korea
+          공공입찰 수집 시스템
         </span>
       </div>
 

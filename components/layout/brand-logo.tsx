@@ -44,7 +44,7 @@ export function BrandLogo({
             variant === "dark" ? "text-white/70" : "text-kt-dark-gray",
           )}
         >
-          BIDLIVE Korea · 입찰공고 대시보드
+          공공입찰 수집 시스템
         </span>
       )}
     </div>

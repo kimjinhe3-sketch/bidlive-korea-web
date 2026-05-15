@@ -16,7 +16,7 @@ import {
   type SortDir,
 } from "@/types/domain";
 
-export const metadata = { title: "대시보드 | BIDLIVE Korea" };
+export const metadata = { title: "공공입찰 수집 시스템" };
 export const dynamic = "force-dynamic";
 
 interface PageProps {
