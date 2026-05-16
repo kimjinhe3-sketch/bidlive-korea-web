@@ -57,7 +57,15 @@ export function BidFilterToolbar() {
 
   const setMany = useCallback(
     (changes: Record<string, string | string[] | boolean | null | undefined>) => {
-      const sp = new URLSearchParams(params.toString());
+      // base 를 React state (params) 가 아닌 window.location.search 에서 읽음.
+      // 사유: 빠른 연속 setMany 호출 시 useSearchParams 가 stale 이라 직전 변경이 누락됨.
+      // router.replace 는 history.replaceState 를 즉시 호출하므로 window.location 은 최신.
+      const base =
+        typeof window !== "undefined"
+          ? window.location.search.slice(1)
+          : params.toString();
+      const sp = new URLSearchParams(base);
+
       for (const [k, v] of Object.entries(changes)) {
         if (v == null || v === "" || (Array.isArray(v) && v.length === 0)) sp.delete(k);
         else if (Array.isArray(v)) sp.set(k, v.join(","));
@@ -66,6 +74,14 @@ export function BidFilterToolbar() {
           else sp.delete(k);
         } else sp.set(k, v);
       }
+
+      // 필터 (정렬/페이지네이션 외) 가 바뀌면 page=1 로 리셋
+      // 사유: page=5 인 상태에서 필터 추가하면 결과 N건 < 5*size 라 빈 페이지 보임
+      const filterChanged = Object.keys(changes).some(
+        (k) => !["page", "sort", "dir", "size"].includes(k),
+      );
+      if (filterChanged) sp.delete("page");
+
       const q = sp.toString();
       startTransition(() =>
         router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false }),
@@ -136,6 +152,7 @@ export function BidFilterToolbar() {
         badge={types.length}
       >
         <ChipMulti
+          paramKey="types"
           options={[...BID_TYPES]}
           value={types}
           onChange={(v) => setMany({ types: v })}
@@ -150,6 +167,7 @@ export function BidFilterToolbar() {
         badge={tags.length}
       >
         <ChipMulti
+          paramKey="tags"
           options={[...TAG_VALUES]}
           labels={TAG_LABEL}
           value={tags}
@@ -165,6 +183,7 @@ export function BidFilterToolbar() {
         badge={regions.length}
       >
         <ChipMulti
+          paramKey="regions"
           options={[...SIDO_LIST, "전국/기타"]}
           value={regions}
           onChange={(v) => setMany({ regions: v })}
@@ -378,12 +397,15 @@ function FilterChip({
 }
 
 function ChipMulti({
+  paramKey,
   options,
   value,
   onChange,
   grid,
   labels,
 }: {
+  /** URL 의 어느 키에 묶여있는지 — toggle 시 stale state 대신 URL 직접 읽기용 */
+  paramKey: string;
   options: readonly string[];
   value: string[];
   onChange: (v: string[]) => void;
@@ -401,7 +423,15 @@ function ChipMulti({
             key={o}
             type="button"
             onClick={() => {
-              const next = on ? value.filter((v) => v !== o) : [...value, o];
+              // value prop 은 stale 가능 (params 가 React state 라 빠른 연속 클릭 시 누락).
+              // URL 에서 직접 현재 선택 읽고 toggle — race condition 회피.
+              const current =
+                typeof window !== "undefined"
+                  ? new URLSearchParams(window.location.search).get(paramKey)?.split(",").filter(Boolean) ?? []
+                  : value;
+              const next = current.includes(o)
+                ? current.filter((v) => v !== o)
+                : [...current, o];
               onChange(next);
             }}
             className={cn(

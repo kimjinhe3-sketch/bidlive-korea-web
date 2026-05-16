@@ -23,6 +23,8 @@ export function BidSourceTabs() {
     const sp = new URLSearchParams(params.toString());
     if (value === "all") sp.delete("group");
     else sp.set("group", value);
+    // 탭 변경 시 page 리셋 — page=5 인데 다른 그룹은 1페이지뿐이면 빈 페이지 표시 방지
+    sp.delete("page");
     const q = sp.toString();
     return q ? `${pathname}?${q}` : pathname;
   }
