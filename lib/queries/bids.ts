@@ -5,8 +5,6 @@ import {
   SOURCE_GROUPS,
   SOURCE_GROUP_ORDER,
   extractSido,
-  isFreshOpen,
-  isClosingSoon,
   type SourceGroup,
   type Sido,
   type SortColumn,
@@ -125,16 +123,16 @@ export interface BidListResult {
 }
 
 /**
- * Server pagination 가능 여부 — region/keyword/tag 필터는 client 후처리라
- * 활성 시 정확한 server count 불가 → 한 번에 더 받아서 클라 페이지네이션.
+ * Server pagination 가능 여부 — regions 만 client 후처리 (extractSido 폴백 필요).
+ * keywords/tags 는 server-side OR 절로 옮겨 정확한 count 보장.
  */
 function hasClientSideFilters(f: BidListFilter): boolean {
-  return (
-    !!f.regions?.length ||
-    !!f.includeKeywords?.length ||
-    !!f.excludeKeywords?.length ||
-    !!f.tags?.length
-  );
+  return !!f.regions?.length;
+}
+
+/** PostgREST or() 절 안의 syntax char 만 제거 (값 escape 용) */
+function escForOr(s: string): string {
+  return s.replace(/[,()]/g, "").trim();
 }
 
 export async function getBidList(
@@ -160,9 +158,10 @@ export async function getBidListPaged(
   const sortCol = filter.sortBy ?? "created_at";
   const sortAsc = filter.sortDir === "asc";
 
-  // 클라이언트 후처리 필터 활성 시 server pagination 정확도 떨어짐 → 한 번에 많이 받음.
+  // regions 만 client 후처리 (extractSido 폴백 필요).
+  // client filter 활성 시 50000 cap — 사실상 무한 (Supabase max-rows 안에서 정확한 count).
   const useClientPagination = hasClientSideFilters(filter);
-  const fetchSize = useClientPagination ? 5000 : pageSize;
+  const fetchSize = useClientPagination ? 50000 : pageSize;
   const startIdx = useClientPagination ? 0 : (pageNum - 1) * pageSize;
   const endIdx = startIdx + fetchSize - 1;
 
@@ -206,6 +205,40 @@ export async function getBidListPaged(
     q = q.lte("estimated_price", filter.amountMaxEok * 1e8);
   }
 
+  // 포함 키워드 — server-side OR (title.ilike.%k1% OR title.ilike.%k2%)
+  if (filter.includeKeywords?.length) {
+    const parts = filter.includeKeywords
+      .map(escForOr)
+      .filter(Boolean)
+      .map((k) => `title.ilike.%${k}%`);
+    if (parts.length > 0) q = q.or(parts.join(","));
+  }
+
+  // 제외 키워드 — server-side AND (title NOT ILIKE %k1% AND ...)
+  if (filter.excludeKeywords?.length) {
+    for (const raw of filter.excludeKeywords) {
+      const k = escForOr(raw);
+      if (k) q = q.not("title", "ilike", `%${k}%`);
+    }
+  }
+
+  // 주목 필터 — server-side OR (new = open_date 3일 이내, closing = close_date D-2 이내)
+  if (filter.tags?.length) {
+    const tagSet = new Set(filter.tags);
+    const todayKst = todayKstStr();
+    const [y, m, d] = todayKst.split("-").map(Number);
+    const newSince = new Date(Date.UTC(y, m - 1, d - 2)).toISOString().slice(0, 10);
+    const closingBefore = new Date(Date.UTC(y, m - 1, d + 3)).toISOString().slice(0, 10);
+    const orParts: string[] = [];
+    if (tagSet.has("new")) {
+      orParts.push(`open_date.gte.${newSince}`);
+    }
+    if (tagSet.has("closing")) {
+      orParts.push(`and(close_date.gte.${todayKst},close_date.lt.${closingBefore})`);
+    }
+    if (orParts.length > 0) q = q.or(orParts.join(","));
+  }
+
   const { data, error, count: serverCount } = await q;
   if (error) {
     console.error("[bids:getBidList]", JSON.stringify(error, null, 2));
@@ -213,35 +246,11 @@ export async function getBidListPaged(
   }
   let rows = (data ?? []) as BidAnnouncement[];
 
-  // ── Server-side 표현 어려운 필터만 client 후처리 ──
-  // (activeOnly / closingWithinDays / amount 는 위에서 server-side 처리됨)
-
+  // ── regions 만 client 후처리 — extractSido 폴백이 SQL 로 표현 어려움 ──
+  // (keywords/tags 는 위에서 server-side OR 절로 처리됨)
   if (filter.regions?.length) {
     const set = new Set(filter.regions);
     rows = rows.filter((r) => set.has(extractSido(r.org_name, r.region, r.title)));
-  }
-
-  if (filter.includeKeywords?.length) {
-    const kws = filter.includeKeywords.map((k) => k.toLowerCase());
-    rows = rows.filter((r) =>
-      kws.some((k) => (r.title ?? "").toLowerCase().includes(k))
-    );
-  }
-  if (filter.excludeKeywords?.length) {
-    const kws = filter.excludeKeywords.map((k) => k.toLowerCase());
-    rows = rows.filter((r) =>
-      !kws.some((k) => (r.title ?? "").toLowerCase().includes(k))
-    );
-  }
-
-  // 주목 필터 — new (공고일 3일 이내) / closing (D-2 이내). OR 결합.
-  if (filter.tags?.length) {
-    const tagSet = new Set(filter.tags);
-    rows = rows.filter((r) => {
-      if (tagSet.has("new") && isFreshOpen(r.open_date)) return true;
-      if (tagSet.has("closing") && isClosingSoon(r.close_date)) return true;
-      return false;
-    });
   }
 
   // 클라이언트 후처리 후 페이지네이션 (필요 시)
