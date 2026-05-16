@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { BrandLogo } from "./brand-logo";
 
 /**
@@ -14,12 +15,16 @@ export function Header({
 }) {
   return (
     <header className="sticky top-0 z-30 flex h-12 items-center justify-between border-b border-white/10 bg-kt-black px-4 lg:px-6">
-      <div className="flex items-center gap-3">
+      <Link
+        href="/bids"
+        className="flex items-center gap-3 transition-opacity hover:opacity-80"
+        title="공공입찰 수집 시스템 — 초기화면"
+      >
         <BrandLogo variant="dark" size="sm" withSubtitle={false} />
         <span className="text-[11px] tracking-wide font-medium text-white/60 hidden sm:inline">
           공공입찰 수집 시스템
         </span>
-      </div>
+      </Link>
 
       <div className="flex items-center gap-2">
         <LiveStatus lastCollectedAt={lastCollectedAt} />
