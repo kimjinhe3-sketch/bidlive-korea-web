@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(req: Request) {
-  let body: { email?: string };
+  let body: { email?: string; preferences?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -25,6 +25,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "이메일 형식 오류" }, { status: 400 });
   }
 
+  // preferences — alerts[] / keywords[] / regions[] / amountMinEok
+  const prefs = (body.preferences ?? {}) as {
+    alerts?: string[];
+    keywords?: string[];
+    regions?: string[];
+    amountMinEok?: number | null;
+  };
+  const preferences = {
+    alerts: Array.isArray(prefs.alerts) && prefs.alerts.length ? prefs.alerts : ["new"],
+    keywords: Array.isArray(prefs.keywords) ? prefs.keywords.slice(0, 30) : [],
+    regions: Array.isArray(prefs.regions) ? prefs.regions.slice(0, 20) : [],
+    amountMinEok:
+      typeof prefs.amountMinEok === "number" && prefs.amountMinEok > 0
+        ? prefs.amountMinEok
+        : null,
+  };
+
   const supabase = await createClient();
   const token = crypto.randomBytes(24).toString("base64url");
 
@@ -34,6 +51,7 @@ export async function POST(req: Request) {
     email,
     active: true,
     unsubscribe_token: token,
+    preferences,
   };
   const { error } = await (supabase as unknown as {
     from: (t: string) => {
