@@ -3,8 +3,8 @@ import { BidKpiGrid } from "@/components/bids/bid-kpi-grid";
 import { BidSourceTabs } from "@/components/bids/bid-source-tabs";
 import { BidTable } from "@/components/bids/bid-table";
 import { BidFilterToolbar } from "@/components/bids/bid-filter-toolbar";
-import { BidCollectButton } from "@/components/bids/bid-collect-button";
 import { BidExportButton } from "@/components/bids/bid-export-button";
+import { BidSubscribeButton } from "@/components/bids/bid-subscribe-button";
 import { BidPagination } from "@/components/bids/bid-pagination";
 import {
   SOURCE_GROUPS,
@@ -87,18 +87,13 @@ export default async function BidsPage({ searchParams }: PageProps) {
   return (
     <div className="space-y-5">
       {/* 1. 페이지 헤더 + 액션 */}
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight text-kt-black">
-            국내 입찰공고 대시보드
-          </h1>
-          <p className="text-xs text-kt-dark-gray">
-            나라장터 · LH · KEPCO · 기타(누리장터·방위사업청·K-water·ALIO·도로공사) — 매일 18시 자동 수집
-          </p>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold tracking-tight text-kt-black">
+          국내 입찰공고 대시보드
+        </h1>
         <div className="flex items-center gap-2">
           <BidExportButton totalCount={total} />
-          <BidCollectButton />
+          <BidSubscribeButton />
         </div>
       </div>
 
