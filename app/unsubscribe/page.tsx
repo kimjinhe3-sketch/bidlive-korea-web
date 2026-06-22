@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const metadata = { title: "알림 해지 | 공공입찰 수집 시스템" };
 export const dynamic = "force-dynamic";
@@ -18,7 +18,7 @@ export default async function UnsubscribePage({
   let email = "";
 
   if (token) {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const updater = supabase as unknown as {
       from: (t: string) => {
         update: (p: Record<string, unknown>) => {

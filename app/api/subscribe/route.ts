@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import crypto from "node:crypto";
 
 /**
@@ -42,7 +42,8 @@ export async function POST(req: Request) {
         : null,
   };
 
-  const supabase = await createClient();
+  // service_role 어드민 클라이언트 — RLS 우회 (anon insert 정책 불필요).
+  const supabase = createAdminClient();
   const token = crypto.randomBytes(24).toString("base64url");
 
   // bid_subscribers 는 별도 마이그레이션 (public/_sql/bid_subscribers.sql) 으로 생성됨.
