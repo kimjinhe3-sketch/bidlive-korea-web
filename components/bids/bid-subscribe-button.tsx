@@ -28,6 +28,14 @@ export function BidSubscribeButton() {
     | { kind: "err"; text: string }
   >({ kind: "idle" });
 
+  // 테스트 발송 상태 (등록과 별개)
+  const [testState, setTestState] = useState<
+    | { kind: "idle" }
+    | { kind: "sending" }
+    | { kind: "ok" }
+    | { kind: "err"; text: string }
+  >({ kind: "idle" });
+
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -96,6 +104,27 @@ export function BidSubscribeButton() {
         setState({ kind: "err", text: e instanceof Error ? e.message : "네트워크 오류" });
       }
     });
+  }
+
+  async function sendTest() {
+    const v = email.trim();
+    if (!v || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) {
+      setTestState({ kind: "err", text: "이메일을 먼저 입력하세요" });
+      return;
+    }
+    setTestState({ kind: "sending" });
+    try {
+      const r = await fetch("/api/test-mail", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: v }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (j.ok) setTestState({ kind: "ok" });
+      else setTestState({ kind: "err", text: j.error || "발송 실패" });
+    } catch (e) {
+      setTestState({ kind: "err", text: e instanceof Error ? e.message : "네트워크 오류" });
+    }
   }
 
   const wantKeyword = kinds.has("keyword");
@@ -240,19 +269,51 @@ export function BidSubscribeButton() {
                 </div>
               )}
 
-              <button
-                type="button"
-                onClick={submit}
-                disabled={pending || !email.trim()}
-                className={cn(
-                  "w-full inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-xs font-bold transition-colors",
-                  "bg-kt-red text-white hover:bg-kt-red-600",
-                  "disabled:opacity-60 disabled:cursor-not-allowed",
-                )}
-              >
-                {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
-                {pending ? "등록 중…" : "알림 등록"}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={submit}
+                  disabled={pending || !email.trim()}
+                  className={cn(
+                    "flex-1 inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-xs font-bold transition-colors",
+                    "bg-kt-red text-white hover:bg-kt-red-600",
+                    "disabled:opacity-60 disabled:cursor-not-allowed",
+                  )}
+                >
+                  {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
+                  {pending ? "등록 중…" : "알림 등록"}
+                </button>
+                <button
+                  type="button"
+                  onClick={sendTest}
+                  disabled={testState.kind === "sending" || !email.trim()}
+                  title="입력한 주소로 테스트 메일 1통 즉시 발송"
+                  className={cn(
+                    "inline-flex items-center justify-center gap-1 rounded-md border px-3 py-2 text-xs font-bold transition-colors",
+                    "border-kt-light-gray/40 text-kt-dark-gray hover:border-kt-black hover:text-kt-black",
+                    "disabled:opacity-60 disabled:cursor-not-allowed",
+                  )}
+                >
+                  {testState.kind === "sending" ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    "테스트 발송"
+                  )}
+                </button>
+              </div>
+
+              {testState.kind === "ok" && (
+                <div className="flex items-center gap-1 text-[11px] text-kt-teal">
+                  <CheckCircle2 className="h-3 w-3" />
+                  테스트 메일 발송됨 — 메일함(+스팸함) 확인
+                </div>
+              )}
+              {testState.kind === "err" && (
+                <div className="flex items-start gap-1 text-[11px] text-kt-red">
+                  <XCircle className="h-3 w-3 mt-0.5 shrink-0" />
+                  {testState.text}
+                </div>
+              )}
 
               <div className="text-[10px] text-kt-light-gray leading-relaxed">
                 언제든 해지 가능 (메일 하단 링크)
