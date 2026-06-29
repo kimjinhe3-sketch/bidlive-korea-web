@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
+import nodemailer from "nodemailer";
 
 /**
  * 테스트 메일 즉시 발송 — POST { email }
- * Resend HTTP API 직접 호출. 사내 메일 수신 가능 여부 확인용.
+ * 우선순위: SMTP_HOST 있으면 SMTP (Gmail/사내, 누구에게나), 없으면 Resend (본인 주소만).
  *
  * 환경변수 (Cloudtype):
- *   RESEND_API_KEY  re_xxx
- *   MAIL_FROM       "공공입찰 정보 알림 <onboarding@resend.dev>"
+ *   [SMTP]   SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS
+ *   [Resend] RESEND_API_KEY
+ *   MAIL_FROM  "공공입찰 정보 알림 <...>"
  */
 export const dynamic = "force-dynamic";
 
@@ -25,16 +27,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "이메일 형식 오류" }, { status: 200 });
   }
 
-  const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.MAIL_FROM || "공공입찰 정보 알림 <onboarding@resend.dev>";
-  if (!apiKey) {
-    return NextResponse.json(
-      { ok: false, error: "RESEND_API_KEY 미설정 (Cloudtype 환경변수 확인)" },
-      { status: 200 },
-    );
-  }
-
   const now = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
+  const subject = "[공공입찰] 테스트 메일 — 수신 확인";
   const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"></head>
 <body style="margin:0;background:#f5f5f5;font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif;">
@@ -46,7 +41,7 @@ export async function POST(req: Request) {
       <h2 style="margin:0 0 10px;font-size:18px;color:#1a1a1a;">✅ 테스트 메일 수신 성공</h2>
       <p style="color:#444;font-size:14px;line-height:1.6;">
         이 메일을 받으셨다면 알림 발송이 정상 동작합니다.<br>
-        실제 알림은 매일 18시에 신규/마감/키워드 공고 요약으로 발송됩니다.
+        실제 알림은 매일 오전 8시에 신규/마감/키워드 공고 요약으로 발송됩니다.
       </p>
       <p style="color:#aaa;font-size:12px;margin-top:16px;">발송 시각: ${now} (KST)</p>
     </div>
@@ -56,34 +51,58 @@ export async function POST(req: Request) {
   </div>
 </body></html>`;
 
-  try {
-    const resp = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from,
-        to: [email],
-        subject: "[공공입찰] 테스트 메일 — 수신 확인",
-        html,
-      }),
-    });
+  const smtpHost = process.env.SMTP_HOST;
+  const resendKey = process.env.RESEND_API_KEY;
 
-    if (resp.status === 200 || resp.status === 201) {
-      const data = await resp.json().catch(() => ({}));
-      return NextResponse.json({ ok: true, email, id: data.id ?? null });
+  // 1) SMTP 우선 (누구에게나 발송 가능)
+  if (smtpHost) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: Number(process.env.SMTP_PORT || 587),
+        secure: Number(process.env.SMTP_PORT) === 465,
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS,
+        },
+      });
+      await transporter.sendMail({ from, to: email, subject, html });
+      return NextResponse.json({ ok: true, email, via: "smtp" });
+    } catch (e) {
+      return NextResponse.json(
+        { ok: false, error: `SMTP 발송 실패: ${e instanceof Error ? e.message : "오류"}` },
+        { status: 200 },
+      );
     }
-    const text = await resp.text();
-    return NextResponse.json(
-      { ok: false, error: `Resend ${resp.status}: ${text.slice(0, 200)}` },
-      { status: 200 },
-    );
-  } catch (e) {
-    return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : "발송 실패" },
-      { status: 200 },
-    );
   }
+
+  // 2) Resend 폴백 (도메인 미인증 시 본인 주소만)
+  if (resendKey) {
+    try {
+      const resp = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ from, to: [email], subject, html }),
+      });
+      if (resp.status === 200 || resp.status === 201) {
+        const data = await resp.json().catch(() => ({}));
+        return NextResponse.json({ ok: true, email, id: data.id ?? null, via: "resend" });
+      }
+      const text = await resp.text();
+      return NextResponse.json(
+        { ok: false, error: `Resend ${resp.status}: ${text.slice(0, 200)}` },
+        { status: 200 },
+      );
+    } catch (e) {
+      return NextResponse.json(
+        { ok: false, error: e instanceof Error ? e.message : "발송 실패" },
+        { status: 200 },
+      );
+    }
+  }
+
+  return NextResponse.json(
+    { ok: false, error: "SMTP_HOST / RESEND_API_KEY 둘 다 미설정 (Cloudtype 환경변수 확인)" },
+    { status: 200 },
+  );
 }
