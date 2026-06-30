@@ -1,4 +1,5 @@
 import { Header } from "@/components/layout/header";
+import { VisitTracker } from "@/components/analytics/visit-tracker";
 import { getBidKpis } from "@/lib/queries/bids";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +20,7 @@ export default async function DashboardLayout({
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
+      <VisitTracker />
       <Header lastCollectedAt={lastCollectedAt} />
       <main className="flex-1 px-4 lg:px-6 py-5 lg:py-6 max-w-[1880px] w-full mx-auto">
         {children}

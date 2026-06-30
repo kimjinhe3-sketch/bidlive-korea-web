@@ -30,7 +30,7 @@ export default async function UnsubscribePage({
     };
     const { data } = await updater
       .from("bid_subscribers")
-      .update({ active: false })
+      .update({ active: false, unsubscribed_at: new Date().toISOString() })
       .eq("unsubscribe_token", token)
       .select("email");
 
