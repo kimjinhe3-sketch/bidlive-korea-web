@@ -26,7 +26,14 @@ export function Header({
         </span>
       </Link>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
+        <Link
+          href="/review"
+          className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] font-bold text-white/70 transition-colors hover:text-white hover:border-white/30"
+          title="AI 추천 vs 실제 개찰 결과 성적표"
+        >
+          AI 리뷰보드
+        </Link>
         <LiveStatus lastCollectedAt={lastCollectedAt} />
       </div>
     </header>
