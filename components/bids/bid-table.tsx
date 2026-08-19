@@ -49,7 +49,7 @@ export function BidTable({
               <ThStatic className="w-[80px]">지역</ThStatic>
               <ThSortable col="bid_type"   label="업종"  sort={sort} dir={dir} sp={searchParams} className="w-[64px]" />
               <ThSortable col="estimated_price" label="금액" sort={sort} dir={dir} sp={searchParams} className="w-[88px]" align="right" />
-              <ThStatic className="w-[96px]">AI 추천</ThStatic>
+              <ThSortable col="rec_rank" label="AI 추천" sort={sort} dir={dir} sp={searchParams} className="w-[96px]" />
               <ThSortable col="close_date" label="마감일" sort={sort} dir={dir} sp={searchParams} className="w-[100px]" />
               <ThSortable col="open_date"  label="공고일" sort={sort} dir={dir} sp={searchParams} className="w-[100px]" />
               <ThSortable col="source"     label="출처"  sort={sort} dir={dir} sp={searchParams} className="w-[110px]" />

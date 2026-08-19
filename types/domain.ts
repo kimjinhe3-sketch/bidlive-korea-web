@@ -250,6 +250,7 @@ export const ATTENTION_LABEL = "분류";
 
 /** 정렬 가능 컬럼 — DB 컬럼명과 매핑 */
 export const SORTABLE_COLUMNS = {
+  rec_rank: "AI 추천",
   open_date: "공고일",
   close_date: "마감일",
   title: "제목",
