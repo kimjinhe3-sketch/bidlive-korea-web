@@ -131,6 +131,21 @@ export function extractSido(
 }
 
 /**
+ * KEPCO(한전) 전자조달 시스템 — 공고 조회 진입점.
+ * KEPCO API 는 공고별 공개 상세페이지 URL 을 제공하지 않고 첨부파일 다운로드
+ * 링크(printDownloadAttachment.do)만 줌. 제목 클릭 시 파일이 다운로드되는 문제가
+ * 있어, KEPCO 공고의 "페이지 이동" 은 SRM 으로 보내고 첨부는 보조 링크로 유지한다.
+ * (SRM 상세는 로그인 후 공고번호 검색 — 공고번호는 bid_no 의 "kepco-" 뒤 부분)
+ */
+export const KEPCO_SRM_URL = "https://srm.kepco.net/index.do";
+
+/** 공고 제목 클릭 시 이동할 URL — KEPCO 는 SRM, 나머지는 detail_url 그대로. */
+export function bidPageUrl(row: { source: string; detail_url: string | null }): string | null {
+  if (row.source === "kepco_api") return KEPCO_SRM_URL;
+  return row.detail_url;
+}
+
+/**
  * D-day 톤 (DESIGN_SYSTEM 1-4):
  *   danger (D-2/D-1/D-day) · warn (D-3) · track (D-4~D-7) · muted (마감)
  */
