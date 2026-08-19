@@ -1,4 +1,4 @@
-import { getBidKpis, getBidListPaged } from "@/lib/queries/bids";
+import { getBidKpis, getBidListPaged, getRecommendations } from "@/lib/queries/bids";
 import { BidKpiGrid } from "@/components/bids/bid-kpi-grid";
 import { BidSourceTabs } from "@/components/bids/bid-source-tabs";
 import { BidTable } from "@/components/bids/bid-table";
@@ -79,6 +79,9 @@ export default async function BidsPage({ searchParams }: PageProps) {
   ]);
   const { rows, total } = listResult;
 
+  // AI 투찰 추천 — 현재 페이지 행만 캐시 조회 (실패해도 무영향)
+  const recs = await getRecommendations(rows.map((r) => r.bid_no));
+
   // KPI 카드 클릭 → 오늘 공고 리스트 (open_date = 오늘) 로 이동할 때 사용
   const todayKst = new Date(new Date().getTime() + 9 * 3600 * 1000)
     .toISOString()
@@ -112,6 +115,7 @@ export default async function BidsPage({ searchParams }: PageProps) {
         </div>
         <BidTable
           rows={rows}
+          recs={recs}
           sort={sortBy ?? null}
           dir={sortDir ?? null}
           searchParams={sp}

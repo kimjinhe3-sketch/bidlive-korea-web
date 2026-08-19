@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   SOURCE_GROUPS,
   SOURCE_GROUP_ORDER,
@@ -335,4 +336,41 @@ export async function getClosingSoonCount(within: number = 2): Promise<number> {
     .lte("close_date", limitIso);
   if (error) return 0;
   return count ?? 0;
+}
+
+
+// ───────────────────── AI 투찰 추천 ─────────────────────
+
+export interface BidRecommendation {
+  bid_no: string;
+  rec_bid_rate: number;
+  rec_bid_amount: number;
+  est_lower_rate: number;
+  expected_sajeong: number;
+  margin: number;
+  confidence: "high" | "medium" | "low";
+  sample_count: number;
+  rationale: Record<string, unknown> | null;
+}
+
+/**
+ * 현재 페이지 행들의 AI 추천 캐시 조회 — bid_no in(...) 단건 인덱스 조회라 가볍다.
+ * (계산은 bid-collector 배치가 매일 저녁 수행 — 웹은 조회만)
+ */
+export async function getRecommendations(
+  bidNos: string[],
+): Promise<Record<string, BidRecommendation>> {
+  if (bidNos.length === 0) return {};
+  // bid_recommendations 는 RLS 로 잠겨 있어 admin client 로 조회 (server-only 파일)
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("bid_recommendations")
+    .select(
+      "bid_no,rec_bid_rate,rec_bid_amount,est_lower_rate,expected_sajeong,margin,confidence,sample_count,rationale",
+    )
+    .in("bid_no", bidNos);
+  if (error) return {}; // 추천 실패해도 대시보드는 정상 (graceful degradation)
+  const map: Record<string, BidRecommendation> = {};
+  for (const r of (data as BidRecommendation[] | null) ?? []) map[r.bid_no] = r;
+  return map;
 }
