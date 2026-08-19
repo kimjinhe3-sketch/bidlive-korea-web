@@ -15,6 +15,7 @@ export interface RecScore {
   actual_win_rate: number;
   actual_lower: number | null;
   outcome: "win" | "under" | "beaten";
+  outcome_v2: string | null;
   diff: number;
   lower_hit: boolean | null;
   open_result_date: string | null;
@@ -27,6 +28,9 @@ export interface ScoreSummary {
   beatenPct: number;
   hit03Pct: number;
   lowerHitPct: number;
+  /** ③ 섀도우 모델(기관 사정율 편향) 낙찰권 % — v2 채점이 있는 표본 기준 */
+  v2N: number;
+  v2WinPct: number | null;
 }
 
 export interface DailyScore extends ScoreSummary {
@@ -55,6 +59,12 @@ function summarize(rows: RecScore[]): ScoreSummary | null {
     beatenPct: pct(rows.filter((r) => r.outcome === "beaten").length),
     hit03Pct: pct(rows.filter((r) => Math.abs(Number(r.diff)) <= 0.3).length),
     lowerHitPct: pct(rows.filter((r) => r.lower_hit).length),
+    v2N: rows.filter((r) => r.outcome_v2).length,
+    v2WinPct: (() => {
+      const v2 = rows.filter((r) => r.outcome_v2);
+      if (v2.length === 0) return null;
+      return Math.round((v2.filter((r) => r.outcome_v2 === "win").length / v2.length) * 1000) / 10;
+    })(),
   };
 }
 
@@ -75,7 +85,7 @@ export async function getReviewData(): Promise<ReviewData> {
   const { data, error } = await supabase
     .from("bid_rec_scores")
     .select(
-      "bid_no,rec_bid_rate,est_lower_rate,confidence,actual_win_rate,actual_lower,outcome,diff,lower_hit,open_result_date",
+      "bid_no,rec_bid_rate,est_lower_rate,confidence,actual_win_rate,actual_lower,outcome,outcome_v2,diff,lower_hit,open_result_date",
     )
     .order("open_result_date", { ascending: false })
     .limit(20000);

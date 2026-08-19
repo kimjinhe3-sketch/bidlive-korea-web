@@ -140,6 +140,12 @@ function SummaryCard({ title, s, highlight }: { title: string; s: ScoreSummary |
             <Metric label="순위 밀림" v={`${s.beatenPct}%`} />
             <Metric label="±0.3%p 적중" v={`${s.hit03Pct}%`} good />
             <Metric label="하한율 적중" v={`${s.lowerHitPct}%`} good />
+            {s.v2WinPct != null && (
+              <div className="col-span-2 mt-1 flex justify-between border-t border-kt-light-gray/25 pt-1">
+                <span title="기관 사정율 편향 반영 모델 — 노출 전 검증 중">섀도우 모델 낙찰권</span>
+                <b className="num text-kt-blue">{s.v2WinPct}% ({s.v2N}건)</b>
+              </div>
+            )}
           </div>
         </>
       ) : (
