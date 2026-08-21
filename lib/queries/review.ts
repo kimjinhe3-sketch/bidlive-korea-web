@@ -9,6 +9,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export interface RecScore {
   bid_no: string;
+  title: string | null;
+  org_name: string | null;
+  grp: string | null;
   rec_bid_rate: number;
   est_lower_rate: number | null;
   confidence: string | null;
@@ -38,6 +41,9 @@ export interface DailyScore extends ScoreSummary {
 }
 
 export interface ReviewData {
+  scope: "ours" | "all";
+  /** 필터 전 전체 채점 수 (scope 무관) */
+  totalAll: number;
   today: ScoreSummary | null;
   d7: ScoreSummary | null;
   d30: ScoreSummary | null;
@@ -80,17 +86,21 @@ function weekStart(dateStr: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-export async function getReviewData(): Promise<ReviewData> {
+export async function getReviewData(scope: "ours" | "all" = "ours"): Promise<ReviewData> {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("bid_rec_scores")
     .select(
-      "bid_no,rec_bid_rate,est_lower_rate,confidence,actual_win_rate,actual_lower,outcome,outcome_v2,diff,lower_hit,open_result_date",
+      "bid_no,title,org_name,grp,rec_bid_rate,est_lower_rate,confidence,actual_win_rate,actual_lower,outcome,outcome_v2,diff,lower_hit,open_result_date",
     )
     .order("open_result_date", { ascending: false })
     .limit(20000);
 
-  const rows = ((error ? [] : data) as RecScore[] | null) ?? [];
+  const allRows = ((error ? [] : data) as RecScore[] | null) ?? [];
+  // 기본: 우리 회사 관심그룹(다이제스트 키워드) 매칭 건만 — '-' = 비매칭
+  const rows = scope === "ours"
+    ? allRows.filter((r) => r.grp && r.grp !== "-")
+    : allRows;
   const today = kstToday();
   const since = (days: number) =>
     new Date(Date.now() + 9 * 3600 * 1000 - days * 86400000).toISOString().slice(0, 10);
@@ -136,6 +146,8 @@ export async function getReviewData(): Promise<ReviewData> {
     .map(([date, rs]) => ({ date, ...(summarize(rs) as ScoreSummary) }));
 
   return {
+    scope,
+    totalAll: allRows.length,
     today: summarize(rows.filter((r) => (r.open_result_date ?? "").startsWith(today))),
     d7: summarize(byDate(since(7))),
     d30: summarize(byDate(since(30))),

@@ -16,8 +16,14 @@ export const dynamic = "force-dynamic";
  *  - ±0.3%p: 추천 투찰률이 실제 낙찰률의 ±0.3%p 안 (PRD G2)
  *  - 하한적중: 낙찰하한율 추정이 실제와 일치
  */
-export default async function ReviewPage() {
-  const d = await getReviewData();
+export default async function ReviewPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
+  const sp = await searchParams;
+  const scope = sp.scope === "all" ? "all" : "ours";
+  const d = await getReviewData(scope);
 
   return (
     <div className="space-y-5">
@@ -25,14 +31,36 @@ export default async function ReviewPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-kt-black">AI 추천 리뷰보드</h1>
           <p className="mt-1 text-sm text-kt-dark-gray">
-            추천 투찰가 vs 실제 개찰 결과 — 누적 채점 <b className="text-kt-black num">{d.totalScored.toLocaleString()}</b>건
+            추천 투찰가 vs 실제 개찰 결과 —{" "}
+            {scope === "ours" ? (
+              <>관심그룹 <b className="text-kt-black num">{d.totalScored.toLocaleString()}</b>건
+              <span className="text-kt-light-gray"> (전체 {d.totalAll.toLocaleString()}건 중)</span></>
+            ) : (
+              <>전체 <b className="text-kt-black num">{d.totalScored.toLocaleString()}</b>건</>
+            )}
             <span className="mx-2 text-kt-light-gray">·</span>
             매일 저녁 개찰결과 수집 후 자동 채점
           </p>
         </div>
-        <Link href="/bids" className="text-sm font-bold text-kt-red hover:underline">
-          ← 대시보드
-        </Link>
+        <div className="flex items-center gap-3">
+          <div className="flex rounded-lg border border-kt-light-gray/40 bg-white p-0.5 text-[12px] font-bold">
+            <Link
+              href="/review"
+              className={cn("rounded-md px-3 py-1", scope === "ours" ? "bg-kt-red text-white" : "text-kt-dark-gray hover:text-kt-black")}
+            >
+              관심그룹
+            </Link>
+            <Link
+              href="/review?scope=all"
+              className={cn("rounded-md px-3 py-1", scope === "all" ? "bg-kt-red text-white" : "text-kt-dark-gray hover:text-kt-black")}
+            >
+              전체
+            </Link>
+          </div>
+          <Link href="/bids" className="text-sm font-bold text-kt-red hover:underline">
+            ← 대시보드
+          </Link>
+        </div>
       </div>
 
       {d.totalScored === 0 ? (
@@ -69,7 +97,8 @@ export default async function ReviewPage() {
               <table className="w-full text-[12.5px]">
                 <thead>
                   <tr className="border-b border-kt-light-gray/30 text-[11px] font-bold uppercase text-kt-dark-gray">
-                    <th className="px-3 py-2 text-left">공고번호</th>
+                    <th className="px-3 py-2 text-left">사업명</th>
+                    <th className="px-3 py-2 text-center">그룹</th>
                     <th className="px-3 py-2 text-center">개찰일</th>
                     <th className="px-3 py-2 text-right">추천 투찰률</th>
                     <th className="px-3 py-2 text-right">실제 낙찰률</th>
@@ -81,7 +110,21 @@ export default async function ReviewPage() {
                 <tbody>
                   {d.recent.map((r) => (
                     <tr key={r.bid_no} className="border-b border-kt-light-gray/20">
-                      <td className="px-3 py-1.5 num text-kt-dark-gray">{r.bid_no}</td>
+                      <td className="px-3 py-1.5 max-w-[300px]">
+                        <div className="truncate font-medium text-kt-black" title={`${r.title ?? ""} · ${r.org_name ?? ""} · ${r.bid_no}`}>
+                          {r.title ?? r.bid_no}
+                        </div>
+                        <div className="truncate text-[11px] text-kt-dark-gray">{r.org_name ?? "-"}</div>
+                      </td>
+                      <td className="px-3 py-1.5 text-center">
+                        {r.grp && r.grp !== "-" ? (
+                          <span className="inline-block whitespace-nowrap rounded border border-kt-blue/25 bg-kt-blue/[0.08] px-1.5 py-0.5 text-[10.5px] font-bold text-kt-blue">
+                            {r.grp}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-kt-light-gray">-</span>
+                        )}
+                      </td>
                       <td className="px-3 py-1.5 text-center num text-kt-dark-gray">
                         {(r.open_result_date ?? "").slice(5, 10)}
                       </td>
