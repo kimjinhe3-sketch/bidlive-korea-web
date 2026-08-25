@@ -25,18 +25,34 @@ export interface RecScore {
   open_result_date: string | null;
 }
 
+/**
+ * 판정 기준 (2026-08-25 전면 개편 — "낙찰권"이 아니라 "실제 낙찰가 근접"이 목표):
+ * 실제 낙찰가보다 크게 낮은 추천은 낙찰되더라도 남들보다 낮은 금액에 계약하는
+ * 저가 수주(원가 리스크)라 성공이 아니다. 오차(추천 − 실제 낙찰률) 3분류로 판정.
+ */
+export const HIT_BAND = 0.5; // ±0.5%p — 적중 인정 폭
+
+export type Verdict = "hit" | "low" | "high";
+
+/** 오차(%p) → 판정: 적중(±0.5) / 저가 제안(0.5 초과 낮음) / 고가 제안(0.5 초과 높음) */
+export function verdictOf(diff: number): Verdict {
+  if (diff < -HIT_BAND) return "low";
+  if (diff > HIT_BAND) return "high";
+  return "hit";
+}
+
 export interface ScoreSummary {
   n: number;
-  winPct: number;
+  /** |오차| ≤ 0.5%p — 실제 낙찰가 수준으로 제안 */
+  hitPct: number;
+  /** 오차 < -0.5%p — 저가 제안 (낙찰돼도 저가 수주 위험) */
+  lowPct: number;
+  /** 오차 > +0.5%p — 고가 제안 (순위 밀림) */
+  highPct: number;
+  /** 하한 미달(무효) 비율 — 사정율 추첨 영향, 참고용 */
   underPct: number;
-  beatenPct: number;
-  hit03Pct: number;
-  lowerHitPct: number;
-  /** ③ 섀도우 모델(기관 사정율 편향) 낙찰권 % — v2 채점이 있는 표본 기준 */
-  v2N: number;
-  v2WinPct: number | null;
-  /** 낙찰권 건에서 실제 낙찰률 - 유효율 중앙값(%p) — 이겼지만 더 받을 수 있었던 폭 */
-  marginLeftMed: number | null;
+  /** 오차 중앙값(%p) — 치우침 방향 (음수=낮게, 양수=높게 제안하는 경향) */
+  medDiff: number;
 }
 
 export interface DailyScore extends ScoreSummary {
@@ -61,29 +77,16 @@ function summarize(rows: RecScore[]): ScoreSummary | null {
   if (rows.length === 0) return null;
   const n = rows.length;
   const pct = (c: number) => Math.round((c / n) * 1000) / 10;
+  const diffs = rows.map((r) => Number(r.diff)).sort((a, b) => a - b);
+  const mid = Math.floor(n / 2);
+  const med = n % 2 ? diffs[mid] : (diffs[mid - 1] + diffs[mid]) / 2;
   return {
     n,
-    winPct: pct(rows.filter((r) => r.outcome === "win").length),
+    hitPct: pct(rows.filter((r) => verdictOf(Number(r.diff)) === "hit").length),
+    lowPct: pct(rows.filter((r) => verdictOf(Number(r.diff)) === "low").length),
+    highPct: pct(rows.filter((r) => verdictOf(Number(r.diff)) === "high").length),
     underPct: pct(rows.filter((r) => r.outcome === "under").length),
-    beatenPct: pct(rows.filter((r) => r.outcome === "beaten").length),
-    hit03Pct: pct(rows.filter((r) => Math.abs(Number(r.diff)) <= 0.3).length),
-    lowerHitPct: pct(rows.filter((r) => r.lower_hit).length),
-    v2N: rows.filter((r) => r.outcome_v2).length,
-    v2WinPct: (() => {
-      const v2 = rows.filter((r) => r.outcome_v2);
-      if (v2.length === 0) return null;
-      return Math.round((v2.filter((r) => r.outcome_v2 === "win").length / v2.length) * 1000) / 10;
-    })(),
-    marginLeftMed: (() => {
-      const ms = rows
-        .filter((r) => r.outcome === "win" && r.eff_rate != null)
-        .map((r) => Number(r.actual_win_rate) - Number(r.eff_rate))
-        .sort((a, b) => a - b);
-      if (ms.length === 0) return null;
-      const mid = Math.floor(ms.length / 2);
-      const med = ms.length % 2 ? ms[mid] : (ms[mid - 1] + ms[mid]) / 2;
-      return Math.round(med * 1000) / 1000;
-    })(),
+    medDiff: Math.round(med * 100) / 100,
   };
 }
 
