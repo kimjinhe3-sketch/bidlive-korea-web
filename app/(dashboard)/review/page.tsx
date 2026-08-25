@@ -193,6 +193,12 @@ function SummaryCard({ title, s, highlight }: { title: string; s: ScoreSummary |
             <Metric label="순위 밀림" v={`${s.beatenPct}%`} />
             <Metric label="±0.3%p 적중" v={`${s.hit03Pct}%`} good />
             <Metric label="하한율 적중" v={`${s.lowerHitPct}%`} good />
+            {s.marginLeftMed != null && (
+              <div className="col-span-2 flex justify-between">
+                <span title="낙찰권 건에서 실제 낙찰률과 우리 유효율의 차이(중앙값) — 이겼지만 더 높게 써도 이겼을 폭 = 놓친 수익">남긴 폭 중앙</span>
+                <b className="num text-kt-dark-gray">{s.marginLeftMed}%p</b>
+              </div>
+            )}
             {s.v2WinPct != null && (
               <div className="col-span-2 mt-1 flex justify-between border-t border-kt-light-gray/25 pt-1">
                 <span title="기관 사정율 편향 반영 모델 — 노출 전 검증 중">섀도우 모델 낙찰권</span>

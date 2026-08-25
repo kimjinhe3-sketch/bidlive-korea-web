@@ -35,6 +35,8 @@ export interface ScoreSummary {
   /** ③ 섀도우 모델(기관 사정율 편향) 낙찰권 % — v2 채점이 있는 표본 기준 */
   v2N: number;
   v2WinPct: number | null;
+  /** 낙찰권 건에서 실제 낙찰률 - 유효율 중앙값(%p) — 이겼지만 더 받을 수 있었던 폭 */
+  marginLeftMed: number | null;
 }
 
 export interface DailyScore extends ScoreSummary {
@@ -71,6 +73,16 @@ function summarize(rows: RecScore[]): ScoreSummary | null {
       const v2 = rows.filter((r) => r.outcome_v2);
       if (v2.length === 0) return null;
       return Math.round((v2.filter((r) => r.outcome_v2 === "win").length / v2.length) * 1000) / 10;
+    })(),
+    marginLeftMed: (() => {
+      const ms = rows
+        .filter((r) => r.outcome === "win" && r.eff_rate != null)
+        .map((r) => Number(r.actual_win_rate) - Number(r.eff_rate))
+        .sort((a, b) => a - b);
+      if (ms.length === 0) return null;
+      const mid = Math.floor(ms.length / 2);
+      const med = ms.length % 2 ? ms[mid] : (ms[mid - 1] + ms[mid]) / 2;
+      return Math.round(med * 1000) / 1000;
     })(),
   };
 }
