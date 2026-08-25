@@ -21,12 +21,24 @@ import { cn } from "@/lib/utils";
 const TIER_LABELS: Record<TierKey, string> = {
   exact: "적중",
   near: "적중권",
-  z005: "±0.005",
-  z01: "±0.01",
-  z1: "±0.1",
-  z5: "±0.5",
+  z005: "정밀",
+  z01: "근접",
+  z1: "양호",
+  z5: "보통",
   low: "저가",
   high: "고가",
+};
+
+/** 등급별 오차 기준 (범례·툴팁 표기용) */
+const TIER_ZONES: Record<TierKey, string> = {
+  exact: "오차 0",
+  near: "±0.0005%p",
+  z005: "±0.005%p",
+  z01: "±0.01%p",
+  z1: "±0.1%p",
+  z5: "±0.5%p",
+  low: "0.5%p 초과 낮음",
+  high: "0.5%p 초과 높음",
 };
 
 const TIER_COLORS: Record<TierKey, string> = {
@@ -49,7 +61,7 @@ const TERMS: [string, string][] = [
   ["오차", "추천 투찰률 − 실제 낙찰률(%p). 음수는 낮게, 양수는 높게 제안했음을 뜻함."],
   ["적중", "오차 0 — 실제 낙찰률과 완전 일치."],
   ["적중권", "최적가(적격심사) 방식은 오차 ±0.0005%p 이내, 최저가 방식은 낙찰가 바로 아래 0.0001~0.0010%p."],
-  ["구간 등급", "±0.005 / ±0.01 / ±0.1 / ±0.5%p — 오차 크기에 따른 근접 수준. 좁은 구간일수록 정밀한 제안."],
+  ["오차 등급", "적중(0) → 적중권(±0.0005) → 정밀(±0.005) → 근접(±0.01) → 양호(±0.1) → 보통(±0.5) → 저가·고가(0.5%p 초과). 좁은 구간일수록 정밀한 제안."],
   ["저가 제안", "실제 낙찰가보다 0.5%p 넘게 낮게 제안. 낙찰되더라도 경쟁사보다 낮은 금액에 수행하는 저가 수주 위험."],
   ["고가 제안", "실제 낙찰가보다 0.5%p 넘게 높게 제안. 투찰했다면 더 낮은 참가자에게 밀림."],
   ["무효", "예정가격 × 낙찰하한율보다 낮아 무효 처리되는 투찰. 예정가격이 개찰 당일 추첨(사정율)으로 정해지기 때문에 발생하는 위험."],
@@ -125,9 +137,10 @@ export default async function ReviewPage({
           <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[11px] text-kt-dark-gray">
             <span className="font-bold">오차 등급</span>
             {ALL_TIER_KEYS.map((k) => (
-              <span key={k} className="inline-flex items-center gap-1">
+              <span key={k} className="inline-flex items-center gap-1" title={TIER_ZONES[k]}>
                 <span className="inline-block h-2 w-2 rounded-sm" style={{ backgroundColor: TIER_COLORS[k] }} />
                 {TIER_LABELS[k]}
+                <span className="num text-[10px] text-kt-light-gray">{TIER_ZONES[k].replace("%p", "")}</span>
               </span>
             ))}
           </div>
@@ -258,7 +271,7 @@ function SummaryCard({ title, s, highlight }: { title: string; s: ScoreSummary |
         <>
           <div className="mt-2 flex items-baseline gap-1.5">
             <span className="text-3xl font-extrabold text-kt-black num">{s.cum1}%</span>
-            <span className="text-xs font-bold text-kt-dark-gray">±0.1%p 이내</span>
+            <span className="text-xs font-bold text-kt-dark-gray" title="오차 ±0.1%p 이내 누적">양호 이상</span>
           </div>
           {/* 오차 등급 분포 바 */}
           <div className="mt-2 flex h-2 w-full overflow-hidden rounded-full bg-kt-light-gray/15">
@@ -266,7 +279,7 @@ function SummaryCard({ title, s, highlight }: { title: string; s: ScoreSummary |
               s.tierPcts[k] > 0 ? (
                 <div
                   key={k}
-                  title={`${TIER_LABELS[k]} ${s.tierPcts[k]}%`}
+                  title={`${TIER_LABELS[k]} (${TIER_ZONES[k]}) ${s.tierPcts[k]}%`}
                   style={{ width: `${s.tierPcts[k]}%`, backgroundColor: TIER_COLORS[k] }}
                 />
               ) : null,
@@ -274,7 +287,7 @@ function SummaryCard({ title, s, highlight }: { title: string; s: ScoreSummary |
           </div>
           <div className="mt-2.5 space-y-0.5 text-[12px] text-kt-dark-gray">
             <div className="flex justify-between">
-              <span title="적중·적중권·±0.005·±0.01 누적">±0.01%p 이내 (정밀)</span>
+              <span title="오차 ±0.01%p 이내 누적 (적중·적중권·정밀·근접)">근접 이상</span>
               <b className="num text-emerald-600">{s.cum01}%</b>
             </div>
             <div className="flex justify-between">
@@ -320,7 +333,7 @@ function TrendTable({
             <tr className="border-b border-kt-light-gray/30 text-[10.5px] font-bold uppercase text-kt-dark-gray">
               <th className="px-3 py-1.5 text-left">{title === "일일" ? "날짜" : title === "주간" ? "주" : "월"}</th>
               <th className="px-2 py-1.5 text-right">채점</th>
-              <th className="px-2 py-1.5 text-right" title="오차 ±0.1%p 이내 비율">±0.1 이내</th>
+              <th className="px-2 py-1.5 text-right" title="오차 ±0.1%p 이내 비율">양호 이상</th>
               <th className="px-2 py-1.5 text-right" title="추천 경향: 음수=낮게, 양수=높게">오차 중앙</th>
             </tr>
           </thead>
@@ -348,8 +361,9 @@ function TierBadge({ diff, invalid }: { diff: number; invalid: boolean }) {
   return (
     <span className="inline-flex items-center gap-1">
       <span
-        className="inline-block rounded-md border px-1.5 py-0.5 text-[10.5px] font-bold num"
+        className="inline-block rounded-md border px-1.5 py-0.5 text-[10.5px] font-bold"
         style={{ color: c, backgroundColor: `${c}1a`, borderColor: `${c}55` }}
+        title={`오차 ${TIER_ZONES[k]}`}
       >
         {TIER_LABELS[k]}
       </span>
