@@ -101,7 +101,9 @@ export default async function ReviewPage({
                     <th className="px-3 py-2 text-center">그룹</th>
                     <th className="px-3 py-2 text-center">개찰일</th>
                     <th className="px-3 py-2 text-right">추천 투찰률</th>
-                    <th className="px-3 py-2 text-right">실제 낙찰률</th>
+                    <th className="px-3 py-2 text-right" title="추천금액 ÷ 실제 예정가격 — 판정 기준값 (사정율 오차만큼 추천률에서 이동)">유효율</th>
+                    <th className="px-3 py-2 text-right" title="실제 낙찰하한율 — 유효율이 이 아래면 미달">하한율</th>
+                    <th className="px-3 py-2 text-right" title="실제 낙찰자의 투찰률 — 유효율이 이 위면 밀림">실제 낙찰률</th>
                     <th className="px-3 py-2 text-right">오차</th>
                     <th className="px-3 py-2 text-center">결과</th>
                     <th className="px-3 py-2 text-center">하한적중</th>
@@ -129,6 +131,14 @@ export default async function ReviewPage({
                         {(r.open_result_date ?? "").slice(5, 10)}
                       </td>
                       <td className="px-3 py-1.5 text-right num font-bold">{Number(r.rec_bid_rate).toFixed(3)}%</td>
+                      <td className={cn("px-3 py-1.5 text-right num font-bold",
+                        r.eff_rate != null && r.actual_lower != null && Number(r.eff_rate) < Number(r.actual_lower)
+                          ? "text-kt-red" : "text-kt-black")}>
+                        {r.eff_rate != null ? `${Number(r.eff_rate).toFixed(3)}%` : "-"}
+                      </td>
+                      <td className="px-3 py-1.5 text-right num text-kt-dark-gray">
+                        {r.actual_lower != null ? `${Number(r.actual_lower).toFixed(3)}%` : "-"}
+                      </td>
                       <td className="px-3 py-1.5 text-right num">{Number(r.actual_win_rate).toFixed(3)}%</td>
                       <td
                         className={cn(

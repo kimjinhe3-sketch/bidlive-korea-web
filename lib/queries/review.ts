@@ -17,6 +17,7 @@ export interface RecScore {
   confidence: string | null;
   actual_win_rate: number;
   actual_lower: number | null;
+  eff_rate: number | null;
   outcome: "win" | "under" | "beaten";
   outcome_v2: string | null;
   diff: number;
@@ -91,7 +92,7 @@ export async function getReviewData(scope: "ours" | "all" = "ours"): Promise<Rev
   const { data, error } = await supabase
     .from("bid_rec_scores")
     .select(
-      "bid_no,title,org_name,grp,rec_bid_rate,est_lower_rate,confidence,actual_win_rate,actual_lower,outcome,outcome_v2,diff,lower_hit,open_result_date",
+      "bid_no,title,org_name,grp,rec_bid_rate,est_lower_rate,confidence,actual_win_rate,actual_lower,eff_rate,outcome,outcome_v2,diff,lower_hit,open_result_date",
     )
     .order("open_result_date", { ascending: false })
     .limit(20000);
