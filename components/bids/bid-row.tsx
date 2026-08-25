@@ -303,6 +303,7 @@ function RecPanelFull({
   const rat = (rec.rationale ?? {}) as Record<string, unknown>;
   const marginDist = (rat.margin_p25_p50_p75 as number[] | undefined) ?? null;
   const sjIqr = (rat.sajeong_iqr as number[] | undefined) ?? null;
+  const dial = (rat.dial as { med_bidders?: number; hist_n?: number; margin_base?: number } | undefined) ?? null;
   const winProb = bidType ? (WIN_PROB[bidType] ?? null) : null;
   const probTone =
     winProb == null ? "" : winProb >= 40 ? "bg-emerald-500" : winProb >= 20 ? "bg-amber-500" : "bg-kt-red";
@@ -367,6 +368,12 @@ function RecPanelFull({
             />
             {marginDist && (
               <BasisRow label="낙찰 마진 분포" value={`${marginDist.join(" / ")} %p (p25·중앙·p75)`} />
+            )}
+            {dial && (
+              <BasisRow
+                label="경쟁 예측"
+                value={`약경쟁 (이 기관 과거 참가 중앙 ${dial.med_bidders}개사 · ${dial.hist_n}건) → 저가 수주 방지 위해 마진 ${Number(dial.margin_base).toFixed(3)} → ${margin.toFixed(3)}%p 상향`}
+              />
             )}
             {rat.base_ratio != null && (
               <BasisRow label="기초금액 배율" value={`추정가격 × ${Number(rat.base_ratio).toFixed(2)}`} />
