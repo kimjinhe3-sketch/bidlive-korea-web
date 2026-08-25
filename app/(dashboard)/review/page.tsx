@@ -1,6 +1,31 @@
 import Link from "next/link";
 import { getReviewData, type ScoreSummary, type DailyScore } from "@/lib/queries/review";
+import { g2bBidUrl } from "@/types/domain";
 import { cn } from "@/lib/utils";
+
+/** 용어 안내 — 화면·메일에서 쓰는 지표 용어의 정의 (id="terms" 앵커로 링크됨) */
+const TERMS: [string, string][] = [
+  ["기초금액", "발주기관이 공고 시점에 공개하는 가격 산정의 기준 금액. 예정가격 산정의 모수가 된다."],
+  ["예정가격", "개찰 시 기초금액에 사정율을 적용해 확정되는 내부 기준 금액. 모든 투찰금액의 평가는 예정가격 대비 비율로 이뤄진다."],
+  ["사정율", "예정가격 ÷ 기초금액(%). 복수예비가격 추첨으로 결정되며 통상 99~101% 범위. 개찰 전에는 확정값을 알 수 없다."],
+  ["투찰률", "투찰금액 ÷ 예정가격(%). 입찰 참가자가 제시한 금액의 상대적 수준."],
+  ["낙찰하한율", "유효한 투찰로 인정되는 최저 투찰률. 예정가격 × 하한율 미만의 투찰은 자동 탈락한다."],
+  ["낙찰률", "실제 낙찰자의 투찰률. 하한율 이상 투찰 중 최저가가 낙찰하는 적격심사제에서는 통상 하한율 부근에 형성된다."],
+  ["적격심사제", "낙찰하한율 이상 투찰자 중 낮은 가격 순으로 이행능력을 심사해 낙찰자를 정하는 방식. 본 시스템의 추천·채점 대상."],
+  ["추천 투찰률", "AI가 산출한 투찰률. 추정 낙찰하한율 + 마진으로 구성된다."],
+  ["마진", "낙찰하한율 위에 두는 여유 폭(%p). 동일 세그먼트의 과거 낙찰 분포에서 산출한다."],
+  ["유효율", "추천 투찰금액 ÷ 실제 확정 예정가격(%). 사정율 예측 오차가 반영된 실효 투찰률로, 채점 판정은 이 값을 기준으로 한다."],
+  ["낙찰권", "유효율이 낙찰하한율 이상이면서 실제 낙찰률 이하인 경우. 해당 금액으로 투찰했다면 1순위였음을 의미한다."],
+  ["하한 미달", "유효율이 낙찰하한율에 미달한 경우. 무효 투찰에 해당하며, 주된 원인은 사정율 예측 오차다."],
+  ["순위 밀림", "유효율이 실제 낙찰률을 초과한 경우. 유효한 투찰이나 더 낮은 가격의 참가자에게 우선순위를 내준 상태."],
+  ["오차", "추천 투찰률 − 실제 낙찰률(%p). 음수는 낙찰자보다 낮게, 양수는 높게 제시했음을 뜻한다."],
+  ["±0.3%p 적중", "오차의 절대값이 0.3%p 이내인 비율. 추천의 정밀도를 나타낸다."],
+  ["하한율 적중", "추정한 낙찰하한율이 공고의 실제 값과 일치한 비율."],
+  ["남긴 폭", "낙찰권 판정 건에서 실제 낙찰률 − 유효율(%p). 더 높은 금액으로도 낙찰이 가능했던 여유분으로, 미실현 수익에 해당한다."],
+  ["섀도우 모델", "운영 화면에 노출하지 않고 채점 성적만 병행 집계하며 검증 중인 개선 모델."],
+  ["경쟁 예측", "발주기관의 과거 참가업체 수 이력으로 경쟁 강도를 예측하고, 약한 경쟁이 예상되는 공고는 저가 수주 방지를 위해 마진을 상향하는 장치."],
+  ["신뢰도", "참조 표본 수와 낙찰하한율 근거 수준에 따른 추천 확신도(high / medium / low)."],
+];
 
 export const metadata = { title: "AI 추천 리뷰보드" };
 export const dynamic = "force-dynamic";
@@ -110,12 +135,26 @@ export default async function ReviewPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {d.recent.map((r) => (
+                  {d.recent.map((r) => {
+                    const g2bUrl = g2bBidUrl(r.bid_no);
+                    return (
                     <tr key={r.bid_no} className="border-b border-kt-light-gray/20">
                       <td className="px-3 py-1.5 max-w-[300px]">
-                        <div className="truncate font-medium text-kt-black" title={`${r.title ?? ""} · ${r.org_name ?? ""} · ${r.bid_no}`}>
-                          {r.title ?? r.bid_no}
-                        </div>
+                        {g2bUrl ? (
+                          <a
+                            href={g2bUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block truncate font-medium text-kt-black hover:text-kt-blue hover:underline"
+                            title={`${r.title ?? ""} · ${r.org_name ?? ""} · ${r.bid_no} — 나라장터 공고·개찰 정보 열기`}
+                          >
+                            {r.title ?? r.bid_no} <span className="text-[10px] text-kt-blue">↗</span>
+                          </a>
+                        ) : (
+                          <div className="truncate font-medium text-kt-black" title={`${r.title ?? ""} · ${r.org_name ?? ""} · ${r.bid_no}`}>
+                            {r.title ?? r.bid_no}
+                          </div>
+                        )}
                         <div className="truncate text-[11px] text-kt-dark-gray">{r.org_name ?? "-"}</div>
                       </td>
                       <td className="px-3 py-1.5 text-center">
@@ -154,13 +193,29 @@ export default async function ReviewPage({
                       </td>
                       <td className="px-3 py-1.5 text-center">{r.lower_hit ? "○" : "✕"}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           </section>
         </>
       )}
+
+      {/* 용어 안내 */}
+      <section id="terms" className="rounded-lg border border-kt-light-gray/40 bg-white">
+        <div className="border-b border-kt-light-gray/30 px-4 py-2.5 text-sm font-bold text-kt-black">
+          용어 안내
+        </div>
+        <dl className="grid gap-x-10 gap-y-2.5 px-5 py-4 text-[12.5px] sm:grid-cols-2">
+          {TERMS.map(([term, def]) => (
+            <div key={term} className="flex gap-3">
+              <dt className="w-[92px] shrink-0 font-bold text-kt-dark-gray">{term}</dt>
+              <dd className="text-kt-black/80">{def}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
 
       <p className="text-[11.5px] text-kt-light-gray">
         ⚠ 채점은 &quot;추천가로 투찰했다면 실제 1순위보다 낮은 유효 투찰이었는가&quot; 기준의 시뮬레이션이며,

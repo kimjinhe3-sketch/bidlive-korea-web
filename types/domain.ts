@@ -146,6 +146,18 @@ export function bidPageUrl(row: { source: string; detail_url: string | null }): 
 }
 
 /**
+ * 나라장터 공고 상세 URL 을 bid_no("R26BK01692815-000" = 공고번호-차수)로 조립.
+ * 마감·개찰 후 bid_announcements 행이 정리돼 detail_url 이 없는 리뷰보드에서 사용.
+ * link/PNPE027_01 라우트는 prcmBsneSeCd 없이도 동작 확인(2026-08-25).
+ * 건별 개찰결과 딥링크는 나라장터 신시스템이 미제공 — 공고 상세 화면에서 확인.
+ */
+export function g2bBidUrl(bidNo: string): string | null {
+  const m = /^([A-Z]\d{2}[A-Z]{2}\d+)-(\d{3})$/.exec(bidNo);
+  if (!m) return null;
+  return `https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=${m[1]}&bidPbancOrd=${m[2]}&pbancType=pbanc`;
+}
+
+/**
  * D-day 톤 (DESIGN_SYSTEM 1-4):
  *   danger (D-2/D-1/D-day) · warn (D-3) · track (D-4~D-7) · muted (마감)
  */

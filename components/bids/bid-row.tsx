@@ -381,7 +381,10 @@ function RecPanelFull({
           </div>
 
           <div className="w-full border-t border-kt-light-gray/25 pt-2 text-[11.5px] text-kt-light-gray">
-            ⚠ {DISCLAIMER}
+            ⚠ {DISCLAIMER}{" "}
+            <a href="/review#terms" className="whitespace-nowrap text-kt-blue hover:underline">
+              용어 안내 →
+            </a>
           </div>
         </div>
       </td>
