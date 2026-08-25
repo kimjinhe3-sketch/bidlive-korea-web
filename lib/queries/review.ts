@@ -27,22 +27,23 @@ export interface RecScore {
 
 /**
  * 판정 = 오차(추천 − 실제 낙찰률, %p) 크기의 구간 등급 (2026-08-25 확정).
- * "적중"은 오차 0(완전 일치)에만 부여하고, 이하 구간별 근접 수준으로 표기.
- * 실제 낙찰가보다 크게 낮은 추천은 낙찰되더라도 저가 수주(원가 리스크)라
- * 성공이 아니므로, ±0.5%p 초과는 방향을 나눠 저가/고가로 표기한다.
+ * 적중(0) → 적중권 → 근접 → 보통 → 이탈권 → 이탈 → 부정확(±1%p 이상).
+ * "적중"은 오차 0(완전 일치)에만 부여. 실제 낙찰가보다 크게 낮은 추천은
+ * 낙찰되더라도 저가 수주(원가 리스크)라 성공이 아니다 — 방향(저가/고가
+ * 제안)은 요약 카드에 별도 표기.
  * 낙찰방식별 적중권: 최적가(적격심사) ±0.0005%p / 최저가는 낙찰가 직하
  * 0.0001~0.0010%p (현재 추천 대상은 적격심사뿐이라 적격 규칙만 실사용).
  */
 export const TIERS = [
   { key: "exact", label: "적중", max: 0 },
   { key: "near", label: "적중권", max: 0.0005 },
-  { key: "z005", label: "±0.005", max: 0.005 },
-  { key: "z01", label: "±0.01", max: 0.01 },
-  { key: "z1", label: "±0.1", max: 0.1 },
-  { key: "z5", label: "±0.5", max: 0.5 },
+  { key: "n005", label: "근접", max: 0.005 },
+  { key: "n01", label: "보통", max: 0.01 },
+  { key: "n1", label: "이탈권", max: 0.1 },
+  { key: "n10", label: "이탈", max: 1.0 },
 ] as const;
 
-export type TierKey = (typeof TIERS)[number]["key"] | "low" | "high";
+export type TierKey = (typeof TIERS)[number]["key"] | "far";
 
 export function tierOf(diff: number, method: "적격" | "최저가" = "적격"): TierKey {
   if (method === "최저가") {
@@ -56,7 +57,7 @@ export function tierOf(diff: number, method: "적격" | "최저가" = "적격"):
   for (const t of TIERS) {
     if (t.max > 0 && a <= t.max) return t.key;
   }
-  return diff < 0 ? "low" : "high";
+  return "far"; // 부정확 — ±1%p 이상 차이
 }
 
 export interface ScoreSummary {
@@ -108,7 +109,7 @@ function summarize(rows: RecScore[]): ScoreSummary | null {
     counts[k] = (counts[k] ?? 0) + 1;
   }
   const tierPcts = {} as Record<TierKey, number>;
-  for (const k of [...TIERS.map((t) => t.key), "low", "high"] as TierKey[]) {
+  for (const k of [...TIERS.map((t) => t.key), "far"] as TierKey[]) {
     tierPcts[k] = pct(counts[k] ?? 0);
   }
   const cumOf = (max: number) => pct(diffs.filter((d) => Math.abs(d) <= max).length);
@@ -117,8 +118,8 @@ function summarize(rows: RecScore[]): ScoreSummary | null {
     tierPcts,
     cum01: cumOf(0.01),
     cum1: cumOf(0.1),
-    lowPct: tierPcts.low,
-    highPct: tierPcts.high,
+    lowPct: pct(diffs.filter((d) => d < -0.5).length),
+    highPct: pct(diffs.filter((d) => d > 0.5).length),
     underPct: pct(rows.filter((r) => r.outcome === "under").length),
     medDiff: Math.round(med * 100) / 100,
   };

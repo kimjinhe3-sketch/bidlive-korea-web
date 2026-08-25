@@ -14,46 +14,43 @@ import { cn } from "@/lib/utils";
  * AI 추천 리뷰보드 — "AI 추천대로 투찰했다면 실제 낙찰가에 얼마나 근접했나" 성적표.
  *
  * 판정 = 오차 구간 등급 (2026-08-25 확정): 적중(0) → 적중권(±0.0005) →
- * 정밀(±0.005) → 근접(±0.01)까지 긍정 / 미흡(±0.1) → 부진(±0.5) →
- * 저가·고가(0.5%p 초과)는 부정 — ±0.1%p면 실전에선 승부가 갈리는 오차다.
+ * 근접(±0.005) → 보통(±0.01) / 이탈권(±0.1) → 이탈(±1) → 부정확(±1%p 이상)
+ * — 이탈권부터 경고 톤. ±0.1%p면 실전에선 승부가 갈리는 오차다.
  * 실제 낙찰가보다 크게 낮은 추천은 낙찰되더라도 저가 수주라 성공이 아니다.
  */
 
 const TIER_LABELS: Record<TierKey, string> = {
   exact: "적중",
   near: "적중권",
-  z005: "정밀",
-  z01: "근접",
-  z1: "미흡",
-  z5: "부진",
-  low: "저가",
-  high: "고가",
+  n005: "근접",
+  n01: "보통",
+  n1: "이탈권",
+  n10: "이탈",
+  far: "부정확",
 };
 
 /** 등급별 오차 기준 (범례·툴팁 표기용) */
 const TIER_ZONES: Record<TierKey, string> = {
   exact: "오차 0",
   near: "±0.0005%p",
-  z005: "±0.005%p",
-  z01: "±0.01%p",
-  z1: "±0.1%p",
-  z5: "±0.5%p",
-  low: "0.5%p 초과 낮음",
-  high: "0.5%p 초과 높음",
+  n005: "±0.005%p",
+  n01: "±0.01%p",
+  n1: "±0.1%p",
+  n10: "±1%p",
+  far: "±1%p 이상",
 };
 
 const TIER_COLORS: Record<TierKey, string> = {
   exact: "#047857",
   near: "#059669",
-  z005: "#10b981",
-  z01: "#0d9488",
-  z1: "#ca8a04",
-  z5: "#ea580c",
-  low: "#dc2626",
-  high: "#475569",
+  n005: "#10b981",
+  n01: "#64748b",
+  n1: "#ca8a04",
+  n10: "#ea580c",
+  far: "#dc2626",
 };
 
-const ALL_TIER_KEYS = [...TIERS.map((t) => t.key), "low", "high"] as TierKey[];
+const ALL_TIER_KEYS = [...TIERS.map((t) => t.key), "far"] as TierKey[];
 
 const TERMS: [string, string][] = [
   ["투찰률", "투찰금액 ÷ 예정가격(%). 입찰 참가자가 제시한 금액의 상대적 수준."],
@@ -62,7 +59,7 @@ const TERMS: [string, string][] = [
   ["오차", "추천 투찰률 − 실제 낙찰률(%p). 음수는 낮게, 양수는 높게 제안했음을 뜻함."],
   ["적중", "오차 0 — 실제 낙찰률과 완전 일치."],
   ["적중권", "최적가(적격심사) 방식은 오차 ±0.0005%p 이내, 최저가 방식은 낙찰가 바로 아래 0.0001~0.0010%p."],
-  ["오차 등급", "적중(0) → 적중권(±0.0005) → 정밀(±0.005) → 근접(±0.01)까지가 실전 투찰에 쓸 수 있는 수준. 미흡(±0.1) → 부진(±0.5) → 저가·고가(0.5%p 초과)는 보정이 필요한 구간."],
+  ["오차 등급", "적중(0) → 적중권(±0.0005) → 근접(±0.005) → 보통(±0.01)까지가 실전 투찰에 참고 가능한 수준. 이탈권(±0.1) → 이탈(±1) → 부정확(±1%p 이상)은 보정이 필요한 구간."],
   ["저가 제안", "실제 낙찰가보다 0.5%p 넘게 낮게 제안. 낙찰되더라도 경쟁사보다 낮은 금액에 수행하는 저가 수주 위험."],
   ["고가 제안", "실제 낙찰가보다 0.5%p 넘게 높게 제안. 투찰했다면 더 낮은 참가자에게 밀림."],
   ["무효", "예정가격 × 낙찰하한율보다 낮아 무효 처리되는 투찰. 예정가격이 개찰 당일 추첨(사정율)으로 정해지기 때문에 발생하는 위험."],
@@ -214,7 +211,7 @@ export default async function ReviewPage({
                       <td
                         className={cn(
                           "px-3 py-1.5 text-right num font-bold",
-                          Math.abs(Number(r.diff)) <= 0.01 ? "text-emerald-600" : "text-kt-dark-gray",
+                          Math.abs(Number(r.diff)) <= 0.005 ? "text-emerald-600" : "text-kt-dark-gray",
                         )}
                       >
                         {Number(r.diff) >= 0 ? "+" : ""}
@@ -272,7 +269,7 @@ function SummaryCard({ title, s, highlight }: { title: string; s: ScoreSummary |
         <>
           <div className="mt-2 flex items-baseline gap-1.5">
             <span className="text-3xl font-extrabold text-kt-black num">{s.cum01}%</span>
-            <span className="text-xs font-bold text-kt-dark-gray" title="오차 ±0.01%p 이내 누적 (적중·적중권·정밀·근접)">근접 이상</span>
+            <span className="text-xs font-bold text-kt-dark-gray" title="오차 ±0.01%p 이내 누적 (적중·적중권·근접·보통)">보통 이상</span>
           </div>
           {/* 오차 등급 분포 바 */}
           <div className="mt-2 flex h-2 w-full overflow-hidden rounded-full bg-kt-light-gray/15">
@@ -288,8 +285,8 @@ function SummaryCard({ title, s, highlight }: { title: string; s: ScoreSummary |
           </div>
           <div className="mt-2.5 space-y-0.5 text-[12px] text-kt-dark-gray">
             <div className="flex justify-between">
-              <span title="오차 ±0.01%p 초과 ~ ±0.5%p — 실전 투찰에 쓰기엔 오차가 큰 구간">미흡·부진</span>
-              <b className="num">{Math.round((s.tierPcts.z1 + s.tierPcts.z5) * 10) / 10}%</b>
+              <span title="오차 ±0.01%p 초과 — 이탈권·이탈·부정확, 보정이 필요한 구간">이탈권 이하</span>
+              <b className="num">{Math.round((s.tierPcts.n1 + s.tierPcts.n10 + s.tierPcts.far) * 10) / 10}%</b>
             </div>
             <div className="flex justify-between">
               <span title="실제 낙찰가보다 0.5%p 넘게 낮게 제안 — 낙찰돼도 저가 수주 위험">저가 제안</span>
@@ -334,7 +331,7 @@ function TrendTable({
             <tr className="border-b border-kt-light-gray/30 text-[10.5px] font-bold uppercase text-kt-dark-gray">
               <th className="px-3 py-1.5 text-left">{title === "일일" ? "날짜" : title === "주간" ? "주" : "월"}</th>
               <th className="px-2 py-1.5 text-right">채점</th>
-              <th className="px-2 py-1.5 text-right" title="오차 ±0.01%p 이내 비율">근접 이상</th>
+              <th className="px-2 py-1.5 text-right" title="오차 ±0.01%p 이내 비율">보통 이상</th>
               <th className="px-2 py-1.5 text-right" title="추천 경향: 음수=낮게, 양수=높게">오차 중앙</th>
             </tr>
           </thead>
