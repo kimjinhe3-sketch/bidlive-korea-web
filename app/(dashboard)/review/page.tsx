@@ -1,8 +1,9 @@
 import Link from "next/link";
 import {
   getReviewData,
-  verdictOf,
-  HIT_BAND,
+  tierOf,
+  TIERS,
+  type TierKey,
   type ScoreSummary,
   type DailyScore,
 } from "@/lib/queries/review";
@@ -12,21 +13,45 @@ import { cn } from "@/lib/utils";
 /**
  * AI 추천 리뷰보드 — "AI 추천대로 투찰했다면 실제 낙찰가에 얼마나 근접했나" 성적표.
  *
- * 판정 3분류 (2026-08-25 개편): 실제 낙찰가보다 크게 낮은 추천은 낙찰되더라도
- * 남들보다 낮은 금액에 계약하는 저가 수주라 성공이 아니다.
- *  - 적중: 오차 ±0.5%p 이내 — 실제 낙찰가 수준으로 제안
- *  - 저가 제안: 0.5%p 초과 낮음 — 저가 수주 위험
- *  - 고가 제안: 0.5%p 초과 높음 — 투찰 시 순위 밀림
+ * 판정 = 오차 구간 등급 (2026-08-25 확정): 적중(오차 0) → 적중권(±0.0005)
+ * → ±0.005 → ±0.01 → ±0.1 → ±0.5 → 저가/고가(0.5%p 초과, 방향 구분).
+ * 실제 낙찰가보다 크게 낮은 추천은 낙찰되더라도 저가 수주라 성공이 아니다.
  */
+
+const TIER_LABELS: Record<TierKey, string> = {
+  exact: "적중",
+  near: "적중권",
+  z005: "±0.005",
+  z01: "±0.01",
+  z1: "±0.1",
+  z5: "±0.5",
+  low: "저가",
+  high: "고가",
+};
+
+const TIER_COLORS: Record<TierKey, string> = {
+  exact: "#047857",
+  near: "#059669",
+  z005: "#10b981",
+  z01: "#0d9488",
+  z1: "#3b82f6",
+  z5: "#94a3b8",
+  low: "#d97706",
+  high: "#475569",
+};
+
+const ALL_TIER_KEYS = [...TIERS.map((t) => t.key), "low", "high"] as TierKey[];
 
 const TERMS: [string, string][] = [
   ["투찰률", "투찰금액 ÷ 예정가격(%). 입찰 참가자가 제시한 금액의 상대적 수준."],
   ["낙찰률", "실제 낙찰자의 투찰률. 이 값에 가깝게 제안하는 것이 AI의 목표."],
   ["추천 투찰률", "AI가 제안한 투찰률. 공고의 낙찰하한율에 과거 낙찰 데이터 기반의 여유 폭을 더해 산출."],
   ["오차", "추천 투찰률 − 실제 낙찰률(%p). 음수는 낮게, 양수는 높게 제안했음을 뜻함."],
-  ["적중", `오차 ±${HIT_BAND}%p 이내. 실제 낙찰가 수준으로 제안한 것.`],
-  ["저가 제안", `실제 낙찰가보다 ${HIT_BAND}%p 넘게 낮게 제안. 낙찰되더라도 경쟁사보다 낮은 금액에 수행하는 저가 수주 위험.`],
-  ["고가 제안", `실제 낙찰가보다 ${HIT_BAND}%p 넘게 높게 제안. 투찰했다면 더 낮은 참가자에게 밀림.`],
+  ["적중", "오차 0 — 실제 낙찰률과 완전 일치."],
+  ["적중권", "최적가(적격심사) 방식은 오차 ±0.0005%p 이내, 최저가 방식은 낙찰가 바로 아래 0.0001~0.0010%p."],
+  ["구간 등급", "±0.005 / ±0.01 / ±0.1 / ±0.5%p — 오차 크기에 따른 근접 수준. 좁은 구간일수록 정밀한 제안."],
+  ["저가 제안", "실제 낙찰가보다 0.5%p 넘게 낮게 제안. 낙찰되더라도 경쟁사보다 낮은 금액에 수행하는 저가 수주 위험."],
+  ["고가 제안", "실제 낙찰가보다 0.5%p 넘게 높게 제안. 투찰했다면 더 낮은 참가자에게 밀림."],
   ["무효", "예정가격 × 낙찰하한율보다 낮아 무효 처리되는 투찰. 예정가격이 개찰 당일 추첨(사정율)으로 정해지기 때문에 발생하는 위험."],
 ];
 
@@ -94,6 +119,17 @@ export default async function ReviewPage({
             <SummaryCard title="오늘" s={d.today} />
             <SummaryCard title="최근 7일" s={d.d7} highlight />
             <SummaryCard title="최근 30일" s={d.d30} />
+          </div>
+
+          {/* 등급 범례 */}
+          <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[11px] text-kt-dark-gray">
+            <span className="font-bold">오차 등급</span>
+            {ALL_TIER_KEYS.map((k) => (
+              <span key={k} className="inline-flex items-center gap-1">
+                <span className="inline-block h-2 w-2 rounded-sm" style={{ backgroundColor: TIER_COLORS[k] }} />
+                {TIER_LABELS[k]}
+              </span>
+            ))}
           </div>
 
           {/* 추이 테이블 */}
@@ -164,14 +200,14 @@ export default async function ReviewPage({
                       <td
                         className={cn(
                           "px-3 py-1.5 text-right num font-bold",
-                          verdictOf(Number(r.diff)) === "hit" ? "text-emerald-600" : "text-kt-dark-gray",
+                          Math.abs(Number(r.diff)) <= 0.01 ? "text-emerald-600" : "text-kt-dark-gray",
                         )}
                       >
                         {Number(r.diff) >= 0 ? "+" : ""}
                         {Number(r.diff).toFixed(3)}p
                       </td>
                       <td className="px-3 py-1.5 text-center">
-                        <VerdictBadge diff={Number(r.diff)} invalid={r.outcome === "under"} />
+                        <TierBadge diff={Number(r.diff)} invalid={r.outcome === "under"} />
                       </td>
                     </tr>
                     );
@@ -221,17 +257,32 @@ function SummaryCard({ title, s, highlight }: { title: string; s: ScoreSummary |
       {s ? (
         <>
           <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="text-3xl font-extrabold text-kt-black num">{s.hitPct}%</span>
-            <span className="text-xs font-bold text-kt-dark-gray">적중</span>
+            <span className="text-3xl font-extrabold text-kt-black num">{s.cum1}%</span>
+            <span className="text-xs font-bold text-kt-dark-gray">±0.1%p 이내</span>
           </div>
-          <div className="text-[11.5px] text-kt-light-gray">실제 낙찰가 ±{HIT_BAND}%p 이내 제안</div>
+          {/* 오차 등급 분포 바 */}
+          <div className="mt-2 flex h-2 w-full overflow-hidden rounded-full bg-kt-light-gray/15">
+            {ALL_TIER_KEYS.map((k) =>
+              s.tierPcts[k] > 0 ? (
+                <div
+                  key={k}
+                  title={`${TIER_LABELS[k]} ${s.tierPcts[k]}%`}
+                  style={{ width: `${s.tierPcts[k]}%`, backgroundColor: TIER_COLORS[k] }}
+                />
+              ) : null,
+            )}
+          </div>
           <div className="mt-2.5 space-y-0.5 text-[12px] text-kt-dark-gray">
             <div className="flex justify-between">
-              <span title="실제 낙찰가보다 크게 낮게 제안 — 낙찰돼도 저가 수주 위험">저가 제안</span>
-              <b className={cn("num", s.lowPct > s.highPct ? "text-amber-600" : "")}>{s.lowPct}%</b>
+              <span title="적중·적중권·±0.005·±0.01 누적">±0.01%p 이내 (정밀)</span>
+              <b className="num text-emerald-600">{s.cum01}%</b>
             </div>
             <div className="flex justify-between">
-              <span title="실제 낙찰가보다 크게 높게 제안 — 투찰 시 순위 밀림">고가 제안</span>
+              <span title="실제 낙찰가보다 0.5%p 넘게 낮게 제안 — 낙찰돼도 저가 수주 위험">저가 제안</span>
+              <b className={cn("num", s.lowPct > 10 ? "text-amber-600" : "")}>{s.lowPct}%</b>
+            </div>
+            <div className="flex justify-between">
+              <span title="실제 낙찰가보다 0.5%p 넘게 높게 제안 — 투찰 시 순위 밀림">고가 제안</span>
               <b className="num">{s.highPct}%</b>
             </div>
             <div className="flex justify-between border-t border-kt-light-gray/25 pt-1 text-[11.5px] text-kt-light-gray">
@@ -269,7 +320,7 @@ function TrendTable({
             <tr className="border-b border-kt-light-gray/30 text-[10.5px] font-bold uppercase text-kt-dark-gray">
               <th className="px-3 py-1.5 text-left">{title === "일일" ? "날짜" : title === "주간" ? "주" : "월"}</th>
               <th className="px-2 py-1.5 text-right">채점</th>
-              <th className="px-2 py-1.5 text-right">적중</th>
+              <th className="px-2 py-1.5 text-right" title="오차 ±0.1%p 이내 비율">±0.1 이내</th>
               <th className="px-2 py-1.5 text-right" title="추천 경향: 음수=낮게, 양수=높게">오차 중앙</th>
             </tr>
           </thead>
@@ -278,7 +329,7 @@ function TrendTable({
               <tr key={r.date} className="border-b border-kt-light-gray/15">
                 <td className="px-3 py-1.5 num text-kt-dark-gray">{labelFmt(r.date)}</td>
                 <td className="px-2 py-1.5 text-right num">{r.n}</td>
-                <td className="px-2 py-1.5 text-right num font-bold text-kt-black">{r.hitPct}%</td>
+                <td className="px-2 py-1.5 text-right num font-bold text-kt-black">{r.cum1}%</td>
                 <td className="px-2 py-1.5 text-right num text-kt-dark-gray">
                   {r.medDiff >= 0 ? "+" : ""}{r.medDiff}%p
                 </td>
@@ -291,18 +342,16 @@ function TrendTable({
   );
 }
 
-function VerdictBadge({ diff, invalid }: { diff: number; invalid: boolean }) {
-  const v = verdictOf(diff);
-  const map = {
-    hit: { label: "적중", cls: "bg-emerald-50 text-emerald-600 border-emerald-200" },
-    low: { label: "저가", cls: "bg-amber-50 text-amber-600 border-amber-300" },
-    high: { label: "고가", cls: "bg-kt-light-gray/15 text-kt-dark-gray border-kt-light-gray/30" },
-  } as const;
-  const m = map[v];
+function TierBadge({ diff, invalid }: { diff: number; invalid: boolean }) {
+  const k = tierOf(diff);
+  const c = TIER_COLORS[k];
   return (
     <span className="inline-flex items-center gap-1">
-      <span className={cn("inline-block rounded-md border px-1.5 py-0.5 text-[10.5px] font-bold", m.cls)}>
-        {m.label}
+      <span
+        className="inline-block rounded-md border px-1.5 py-0.5 text-[10.5px] font-bold num"
+        style={{ color: c, backgroundColor: `${c}1a`, borderColor: `${c}55` }}
+      >
+        {TIER_LABELS[k]}
       </span>
       {invalid && (
         <span

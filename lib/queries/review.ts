@@ -26,25 +26,47 @@ export interface RecScore {
 }
 
 /**
- * 판정 기준 (2026-08-25 전면 개편 — "낙찰권"이 아니라 "실제 낙찰가 근접"이 목표):
- * 실제 낙찰가보다 크게 낮은 추천은 낙찰되더라도 남들보다 낮은 금액에 계약하는
- * 저가 수주(원가 리스크)라 성공이 아니다. 오차(추천 − 실제 낙찰률) 3분류로 판정.
+ * 판정 = 오차(추천 − 실제 낙찰률, %p) 크기의 구간 등급 (2026-08-25 확정).
+ * "적중"은 오차 0(완전 일치)에만 부여하고, 이하 구간별 근접 수준으로 표기.
+ * 실제 낙찰가보다 크게 낮은 추천은 낙찰되더라도 저가 수주(원가 리스크)라
+ * 성공이 아니므로, ±0.5%p 초과는 방향을 나눠 저가/고가로 표기한다.
+ * 낙찰방식별 적중권: 최적가(적격심사) ±0.0005%p / 최저가는 낙찰가 직하
+ * 0.0001~0.0010%p (현재 추천 대상은 적격심사뿐이라 적격 규칙만 실사용).
  */
-export const HIT_BAND = 0.5; // ±0.5%p — 적중 인정 폭
+export const TIERS = [
+  { key: "exact", label: "적중", max: 0 },
+  { key: "near", label: "적중권", max: 0.0005 },
+  { key: "z005", label: "±0.005", max: 0.005 },
+  { key: "z01", label: "±0.01", max: 0.01 },
+  { key: "z1", label: "±0.1", max: 0.1 },
+  { key: "z5", label: "±0.5", max: 0.5 },
+] as const;
 
-export type Verdict = "hit" | "low" | "high";
+export type TierKey = (typeof TIERS)[number]["key"] | "low" | "high";
 
-/** 오차(%p) → 판정: 적중(±0.5) / 저가 제안(0.5 초과 낮음) / 고가 제안(0.5 초과 높음) */
-export function verdictOf(diff: number): Verdict {
-  if (diff < -HIT_BAND) return "low";
-  if (diff > HIT_BAND) return "high";
-  return "hit";
+export function tierOf(diff: number, method: "적격" | "최저가" = "적격"): TierKey {
+  if (method === "최저가") {
+    // 최저가 낙찰제: 낙찰가 바로 아래(0.0001~0.0010%p 낮게)가 적중권
+    if (diff === 0) return "exact";
+    if (diff <= -0.0001 && diff >= -0.001) return "near";
+  } else if (Math.abs(diff) <= 0.0005) {
+    return diff === 0 ? "exact" : "near";
+  }
+  const a = Math.abs(diff);
+  for (const t of TIERS) {
+    if (t.max > 0 && a <= t.max) return t.key;
+  }
+  return diff < 0 ? "low" : "high";
 }
 
 export interface ScoreSummary {
   n: number;
-  /** |오차| ≤ 0.5%p — 실제 낙찰가 수준으로 제안 */
-  hitPct: number;
+  /** 등급별 비율(%) — TIERS 순서 + low(저가)/high(고가) */
+  tierPcts: Record<TierKey, number>;
+  /** |오차| ≤ 0.01%p 누적 비율 */
+  cum01: number;
+  /** |오차| ≤ 0.1%p 누적 비율 */
+  cum1: number;
   /** 오차 < -0.5%p — 저가 제안 (낙찰돼도 저가 수주 위험) */
   lowPct: number;
   /** 오차 > +0.5%p — 고가 제안 (순위 밀림) */
@@ -80,11 +102,23 @@ function summarize(rows: RecScore[]): ScoreSummary | null {
   const diffs = rows.map((r) => Number(r.diff)).sort((a, b) => a - b);
   const mid = Math.floor(n / 2);
   const med = n % 2 ? diffs[mid] : (diffs[mid - 1] + diffs[mid]) / 2;
+  const counts = {} as Record<TierKey, number>;
+  for (const r of rows) {
+    const k = tierOf(Number(r.diff));
+    counts[k] = (counts[k] ?? 0) + 1;
+  }
+  const tierPcts = {} as Record<TierKey, number>;
+  for (const k of [...TIERS.map((t) => t.key), "low", "high"] as TierKey[]) {
+    tierPcts[k] = pct(counts[k] ?? 0);
+  }
+  const cumOf = (max: number) => pct(diffs.filter((d) => Math.abs(d) <= max).length);
   return {
     n,
-    hitPct: pct(rows.filter((r) => verdictOf(Number(r.diff)) === "hit").length),
-    lowPct: pct(rows.filter((r) => verdictOf(Number(r.diff)) === "low").length),
-    highPct: pct(rows.filter((r) => verdictOf(Number(r.diff)) === "high").length),
+    tierPcts,
+    cum01: cumOf(0.01),
+    cum1: cumOf(0.1),
+    lowPct: tierPcts.low,
+    highPct: tierPcts.high,
     underPct: pct(rows.filter((r) => r.outcome === "under").length),
     medDiff: Math.round(med * 100) / 100,
   };
