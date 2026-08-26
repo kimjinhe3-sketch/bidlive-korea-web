@@ -63,8 +63,8 @@ export interface ScoreSummary {
   n: number;
   /** 등급별 비율(%) — TIERS 순서 + far(부정확) */
   tierPcts: Record<TierKey, number>;
-  /** |오차| ≤ 0.1%p 누적 비율 — "보통 이상" */
-  cumOk: number;
+  /** |오차| ≤ 0.005%p 누적 비율 — "적중권 이상" (적중+적중권). 핵심 지표 */
+  cumNear: number;
   /** 오차 < -0.5%p — 저가 제안 (낙찰돼도 저가 수주 위험) */
   lowPct: number;
   /** 오차 > +0.5%p — 고가 제안 (순위 밀림) */
@@ -119,7 +119,7 @@ function summarize(rows: RecScore[]): ScoreSummary | null {
   return {
     n,
     tierPcts,
-    cumOk: cumOf(0.1),
+    cumNear: cumOf(0.005),
     lowPct: pct(diffs.filter((d) => d < -0.5).length),
     highPct: pct(diffs.filter((d) => d > 0.5).length),
     underPct: pct(rows.filter((r) => r.outcome === "under").length),
@@ -176,7 +176,7 @@ export async function getReviewKpi(): Promise<ReviewKpi> {
 
 export async function getReviewData(
   scope: "ours" | "all" = "ours",
-  dateFilter: string = "all",
+  dateFilter: string = "latest", // "latest"=최신 개찰일(기본) / "all" / "YYYY-MM-DD"
 ): Promise<ReviewData> {
   const supabase = createAdminClient();
   const { data, error } = await supabase
@@ -246,13 +246,15 @@ export async function getReviewData(
   const dates = [...dateMap.entries()]
     .sort((a, b) => (a[0] < b[0] ? 1 : -1))
     .map(([date, n]) => ({ date, n }));
-  const filtered = dateFilter !== "all"
-    ? rows.filter((r) => (r.open_result_date ?? "").startsWith(dateFilter))
+  // "latest" = 가장 최근 개찰일(전일 평가분)이 기본값
+  const resolved = dateFilter === "latest" ? (dates[0]?.date ?? "all") : dateFilter;
+  const filtered = resolved !== "all"
+    ? rows.filter((r) => (r.open_result_date ?? "").startsWith(resolved))
     : rows;
 
   return {
     scope,
-    dateFilter,
+    dateFilter: resolved,
     dates,
     totalAll: allRows.length,
     today: summarize(rows.filter((r) => (r.open_result_date ?? "").startsWith(today))),

@@ -59,6 +59,13 @@ function fmtMoneyDiff(v: number): string {
   return `${sign}${a.toLocaleString()}원`;
 }
 
+/** 금액(원) → 압축 표기 (부호 없음) */
+function fmtMoney(v: number): string {
+  if (v >= 100_000_000) return `${(v / 100_000_000).toFixed(1)}억`;
+  if (v >= 10_000) return `${Math.round(v / 10_000).toLocaleString()}만`;
+  return `${v.toLocaleString()}원`;
+}
+
 const ALL_TIER_KEYS = [...TIERS.map((t) => t.key), "far"] as TierKey[];
 
 const TERMS: [string, string][] = [
@@ -84,14 +91,14 @@ export default async function ReviewPage({
 }) {
   const sp = await searchParams;
   const scope = sp.scope === "all" ? "all" : "ours";
-  const dateFilter = /^\d{4}-\d{2}-\d{2}$/.test(sp.date ?? "") ? sp.date! : "all";
+  const dateFilter =
+    sp.date === "all" ? "all" : /^\d{4}-\d{2}-\d{2}$/.test(sp.date ?? "") ? sp.date! : "latest";
   const d = await getReviewData(scope, dateFilter);
   const hrefFor = (date: string) => {
     const q = new URLSearchParams();
     if (scope === "all") q.set("scope", "all");
-    if (date !== "all") q.set("date", date);
-    const qs = q.toString();
-    return qs ? `/review?${qs}` : "/review";
+    q.set("date", date); // "all" 도 명시 — 기본값(파라미터 없음)은 최신 개찰일
+    return `/review?${q.toString()}`;
   };
 
   return (
@@ -212,6 +219,7 @@ export default async function ReviewPage({
                 <thead>
                   <tr className="border-b border-kt-light-gray/30 text-[11px] font-bold uppercase text-kt-dark-gray">
                     <th className="px-3 py-2 text-left">사업명</th>
+                    <th className="px-3 py-2 text-right" title="실제 낙찰자의 최종 낙찰 금액">낙찰가</th>
                     <th className="px-3 py-2 text-center">그룹</th>
                     <th className="px-3 py-2 text-center">개찰일</th>
                     <th className="px-3 py-2 text-right">AI 추천</th>
@@ -243,6 +251,12 @@ export default async function ReviewPage({
                           </div>
                         )}
                         <div className="truncate text-[11px] text-kt-dark-gray">{r.org_name ?? "-"}</div>
+                      </td>
+                      <td
+                        className="px-3 py-1.5 text-right num font-bold text-kt-black"
+                        title={r.win_bid_amount != null ? `${Number(r.win_bid_amount).toLocaleString()}원` : undefined}
+                      >
+                        {r.win_bid_amount != null ? fmtMoney(Number(r.win_bid_amount)) : "-"}
                       </td>
                       <td className="px-3 py-1.5 text-center">
                         {r.grp && r.grp !== "-" ? (
@@ -330,8 +344,8 @@ function SummaryCard({ title, s, highlight }: { title: string; s: ScoreSummary |
       {s ? (
         <>
           <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="text-3xl font-extrabold text-kt-black num">{s.cumOk}%</span>
-            <span className="text-xs font-bold text-kt-dark-gray" title="오차 ±0.1%p 이내 누적 (적중·적중권·근접·보통)">보통 이상</span>
+            <span className="text-3xl font-extrabold text-kt-black num">{s.cumNear}%</span>
+            <span className="text-xs font-bold text-kt-dark-gray" title="오차 ±0.005%p 이내 누적 (적중+적중권)">적중권 이상</span>
           </div>
           {/* 오차 등급 분포 바 */}
           <div className="mt-2 flex h-2 w-full overflow-hidden rounded-full bg-kt-light-gray/15">
@@ -393,7 +407,7 @@ function TrendTable({
             <tr className="border-b border-kt-light-gray/30 text-[10.5px] font-bold uppercase text-kt-dark-gray">
               <th className="px-3 py-1.5 text-left">{title === "일일" ? "날짜" : title === "주간" ? "주" : "월"}</th>
               <th className="px-2 py-1.5 text-right">채점</th>
-              <th className="px-2 py-1.5 text-right" title="오차 ±0.1%p 이내 비율">보통 이상</th>
+              <th className="px-2 py-1.5 text-right" title="오차 ±0.005%p 이내(적중+적중권) 비율">적중권률</th>
               <th className="px-2 py-1.5 text-right" title="추천 경향: 음수=낮게, 양수=높게">오차 중앙</th>
             </tr>
           </thead>
@@ -402,7 +416,7 @@ function TrendTable({
               <tr key={r.date} className="border-b border-kt-light-gray/15">
                 <td className="px-3 py-1.5 num text-kt-dark-gray">{labelFmt(r.date)}</td>
                 <td className="px-2 py-1.5 text-right num">{r.n}</td>
-                <td className="px-2 py-1.5 text-right num font-bold text-kt-black">{r.cumOk}%</td>
+                <td className="px-2 py-1.5 text-right num font-bold text-kt-black">{r.cumNear}%</td>
                 <td className="px-2 py-1.5 text-right num text-kt-dark-gray">
                   {r.medDiff >= 0 ? "+" : ""}{r.medDiff}%p
                 </td>
