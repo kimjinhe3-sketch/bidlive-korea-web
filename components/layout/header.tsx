@@ -29,9 +29,10 @@ export function Header({
       <div className="flex items-center gap-3">
         <Link
           href="/review"
-          className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] font-bold text-white/70 transition-colors hover:text-white hover:border-white/30"
+          className="inline-flex items-center gap-1.5 rounded-full bg-kt-red px-3.5 py-1.5 text-[11.5px] font-bold text-white shadow-[0_0_10px_rgba(226,30,54,0.4)] transition-all hover:brightness-110 hover:shadow-[0_0_16px_rgba(226,30,54,0.65)]"
           title="AI 추천 vs 실제 개찰 결과 성적표"
         >
+          <span aria-hidden className="text-[12.5px] leading-none">🤖</span>
           AI 리뷰보드
         </Link>
         <LiveStatus lastCollectedAt={lastCollectedAt} />
