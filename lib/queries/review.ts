@@ -18,6 +18,8 @@ export interface RecScore {
   actual_win_rate: number;
   actual_lower: number | null;
   eff_rate: number | null;
+  rec_bid_amount: number | null;
+  win_bid_amount: number | null;
   outcome: "win" | "under" | "beaten";
   outcome_v2: string | null;
   diff: number;
@@ -36,38 +38,33 @@ export interface RecScore {
  */
 export const TIERS = [
   { key: "exact", label: "적중", max: 0 },
-  { key: "near", label: "적중권", max: 0.0005 },
-  { key: "n005", label: "근접", max: 0.005 },
-  { key: "n01", label: "보통", max: 0.01 },
-  { key: "n1", label: "이탈권", max: 0.1 },
-  { key: "n10", label: "이탈", max: 1.0 },
+  { key: "near", label: "적중권", max: 0.005 },
+  { key: "close", label: "근접", max: 0.05 },
+  { key: "normal", label: "보통", max: 0.1 },
+  { key: "drift", label: "이탈권", max: 0.5 },
+  { key: "out", label: "이탈", max: 3.0 },
 ] as const;
 
 export type TierKey = (typeof TIERS)[number]["key"] | "far";
 
 export function tierOf(diff: number, method: "적격" | "최저가" = "적격"): TierKey {
-  if (method === "최저가") {
-    // 최저가 낙찰제: 낙찰가 바로 아래(0.0001~0.0010%p 낮게)가 적중권
-    if (diff === 0) return "exact";
-    if (diff <= -0.0001 && diff >= -0.001) return "near";
-  } else if (Math.abs(diff) <= 0.0005) {
-    return diff === 0 ? "exact" : "near";
+  if (diff === 0) return "exact";
+  if (method === "최저가" && diff <= -0.0001 && diff >= -0.001) {
+    return "near"; // 최저가 낙찰제: 낙찰가 바로 아래가 적중권
   }
   const a = Math.abs(diff);
   for (const t of TIERS) {
     if (t.max > 0 && a <= t.max) return t.key;
   }
-  return "far"; // 부정확 — ±1%p 이상 차이
+  return "far"; // 부정확 — ±3%p 이상 차이
 }
 
 export interface ScoreSummary {
   n: number;
-  /** 등급별 비율(%) — TIERS 순서 + low(저가)/high(고가) */
+  /** 등급별 비율(%) — TIERS 순서 + far(부정확) */
   tierPcts: Record<TierKey, number>;
-  /** |오차| ≤ 0.01%p 누적 비율 */
-  cum01: number;
-  /** |오차| ≤ 0.1%p 누적 비율 */
-  cum1: number;
+  /** |오차| ≤ 0.1%p 누적 비율 — "보통 이상" */
+  cumOk: number;
   /** 오차 < -0.5%p — 저가 제안 (낙찰돼도 저가 수주 위험) */
   lowPct: number;
   /** 오차 > +0.5%p — 고가 제안 (순위 밀림) */
@@ -122,8 +119,7 @@ function summarize(rows: RecScore[]): ScoreSummary | null {
   return {
     n,
     tierPcts,
-    cum01: cumOf(0.01),
-    cum1: cumOf(0.1),
+    cumOk: cumOf(0.1),
     lowPct: pct(diffs.filter((d) => d < -0.5).length),
     highPct: pct(diffs.filter((d) => d > 0.5).length),
     underPct: pct(rows.filter((r) => r.outcome === "under").length),
@@ -154,7 +150,7 @@ export async function getReviewData(
   const { data, error } = await supabase
     .from("bid_rec_scores")
     .select(
-      "bid_no,title,org_name,grp,rec_bid_rate,est_lower_rate,confidence,actual_win_rate,actual_lower,eff_rate,outcome,outcome_v2,diff,lower_hit,open_result_date",
+      "bid_no,title,org_name,grp,rec_bid_rate,est_lower_rate,confidence,actual_win_rate,actual_lower,eff_rate,rec_bid_amount,win_bid_amount,outcome,outcome_v2,diff,lower_hit,open_result_date",
     )
     .order("open_result_date", { ascending: false })
     .limit(20000);
