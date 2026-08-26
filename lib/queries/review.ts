@@ -84,6 +84,10 @@ export interface DailyScore extends ScoreSummary {
 
 export interface ReviewData {
   scope: "ours" | "all";
+  /** 상세 테이블 개찰일 필터 — "all" 또는 "YYYY-MM-DD" */
+  dateFilter: string;
+  /** 개찰일 칩 목록 (전체 이력, 최신순) */
+  dates: { date: string; n: number }[];
   /** 필터 전 전체 채점 수 (scope 무관) */
   totalAll: number;
   today: ScoreSummary | null;
@@ -92,7 +96,9 @@ export interface ReviewData {
   daily: DailyScore[];       // 최근 30일 일별
   weekly: DailyScore[];      // 최근 12주 주별 (date = 주 시작일)
   monthly: DailyScore[];     // 월별 (date = YYYY-MM)
-  recent: RecScore[];        // 최근 채점 상세
+  recent: RecScore[];        // 채점 상세 (dateFilter 적용, DETAIL_CAP 상한)
+  /** dateFilter 적용 후 총 건수 (CAP 이전) */
+  recentTotal: number;
   totalScored: number;
 }
 
@@ -137,7 +143,13 @@ function weekStart(dateStr: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-export async function getReviewData(scope: "ours" | "all" = "ours"): Promise<ReviewData> {
+/** 상세 테이블 '전체' 선택 시 렌더 상한 (페이지 무게 보호) */
+export const DETAIL_CAP = 300;
+
+export async function getReviewData(
+  scope: "ours" | "all" = "ours",
+  dateFilter: string = "all",
+): Promise<ReviewData> {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("bid_rec_scores")
@@ -196,8 +208,24 @@ export async function getReviewData(scope: "ours" | "all" = "ours"): Promise<Rev
     .sort((a, b) => (a[0] < b[0] ? 1 : -1))
     .map(([date, rs]) => ({ date, ...(summarize(rs) as ScoreSummary) }));
 
+  // 상세 테이블 — 개찰일 선택(기본 전체). 날짜 칩 목록은 전체 이력 기준.
+  const dateMap = new Map<string, number>();
+  for (const r of rows) {
+    const d2 = (r.open_result_date ?? "").slice(0, 10);
+    if (!d2) continue;
+    dateMap.set(d2, (dateMap.get(d2) ?? 0) + 1);
+  }
+  const dates = [...dateMap.entries()]
+    .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+    .map(([date, n]) => ({ date, n }));
+  const filtered = dateFilter !== "all"
+    ? rows.filter((r) => (r.open_result_date ?? "").startsWith(dateFilter))
+    : rows;
+
   return {
     scope,
+    dateFilter,
+    dates,
     totalAll: allRows.length,
     today: summarize(rows.filter((r) => (r.open_result_date ?? "").startsWith(today))),
     d7: summarize(byDate(since(7))),
@@ -205,7 +233,8 @@ export async function getReviewData(scope: "ours" | "all" = "ours"): Promise<Rev
     daily,
     weekly,
     monthly,
-    recent: rows.slice(0, 30),
+    recent: filtered.slice(0, DETAIL_CAP),
+    recentTotal: filtered.length,
     totalScored: rows.length,
   };
 }

@@ -75,7 +75,15 @@ export default async function ReviewPage({
 }) {
   const sp = await searchParams;
   const scope = sp.scope === "all" ? "all" : "ours";
-  const d = await getReviewData(scope);
+  const dateFilter = /^\d{4}-\d{2}-\d{2}$/.test(sp.date ?? "") ? sp.date! : "all";
+  const d = await getReviewData(scope, dateFilter);
+  const hrefFor = (date: string) => {
+    const q = new URLSearchParams();
+    if (scope === "all") q.set("scope", "all");
+    if (date !== "all") q.set("date", date);
+    const qs = q.toString();
+    return qs ? `/review?${qs}` : "/review";
+  };
 
   return (
     <div className="space-y-5">
@@ -150,13 +158,45 @@ export default async function ReviewPage({
             <TrendTable title="월간" rows={d.monthly} labelFmt={(s) => s} />
           </div>
 
-          {/* 최근 채점 상세 */}
+          {/* 채점 상세 — 개찰일 선택 */}
           <section className="rounded-lg border border-kt-light-gray/40 bg-white overflow-hidden">
-            <div className="border-b border-kt-light-gray/30 px-4 py-2.5 text-sm font-bold text-kt-black">
-              최근 채점 상세
-              <span className="ml-2 text-[11.5px] font-normal text-kt-light-gray">
-                사업명 클릭 시 나라장터 공고·개찰 정보로 이동
-              </span>
+            <div className="border-b border-kt-light-gray/30 px-4 py-2.5">
+              <div className="text-sm font-bold text-kt-black">
+                채점 상세
+                <span className="ml-2 text-[11.5px] font-normal text-kt-light-gray">
+                  {d.dateFilter === "all"
+                    ? `전체 ${d.recentTotal.toLocaleString()}건${d.recentTotal > d.recent.length ? ` 중 최신 ${d.recent.length}건 표시` : ""}`
+                    : `${d.dateFilter} 개찰 ${d.recentTotal.toLocaleString()}건`}
+                  <span className="mx-1.5">·</span>사업명 클릭 시 나라장터 공고·개찰 정보로 이동
+                </span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5 text-[11.5px] font-bold">
+                <Link
+                  href={hrefFor("all")}
+                  className={cn(
+                    "rounded-md border px-2 py-0.5",
+                    d.dateFilter === "all"
+                      ? "border-kt-red bg-kt-red text-white"
+                      : "border-kt-light-gray/40 text-kt-dark-gray hover:border-kt-red/40 hover:text-kt-black",
+                  )}
+                >
+                  전체
+                </Link>
+                {d.dates.slice(0, 20).map((dt) => (
+                  <Link
+                    key={dt.date}
+                    href={hrefFor(dt.date)}
+                    className={cn(
+                      "rounded-md border px-2 py-0.5 num",
+                      d.dateFilter === dt.date
+                        ? "border-kt-red bg-kt-red text-white"
+                        : "border-kt-light-gray/40 text-kt-dark-gray hover:border-kt-red/40 hover:text-kt-black",
+                    )}
+                  >
+                    {dt.date.slice(5)} <span className="font-normal opacity-70">{dt.n}</span>
+                  </Link>
+                ))}
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-[12.5px]">
