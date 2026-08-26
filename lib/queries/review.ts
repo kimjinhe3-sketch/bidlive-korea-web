@@ -157,7 +157,8 @@ export async function getReviewKpi(): Promise<ReviewKpi> {
       .select("open_result_date")
       .order("open_result_date", { ascending: false })
       .limit(1);
-    const latestDate = latest?.[0]?.open_result_date?.slice(0, 10) ?? null;
+    const rows = (latest ?? []) as { open_result_date: string | null }[];
+    const latestDate = rows[0]?.open_result_date?.slice(0, 10) ?? null;
     const [{ count: total }, { count: latestN }] = await Promise.all([
       supabase.from("bid_rec_scores").select("*", { count: "exact", head: true }),
       latestDate
