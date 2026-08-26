@@ -142,6 +142,37 @@ function weekStart(dateStr: string): string {
 /** 상세 테이블 '전체' 선택 시 렌더 상한 (페이지 무게 보호) */
 export const DETAIL_CAP = 300;
 
+/** 대시보드 KPI 카드용 경량 요약 — 최신 개찰일 채점 건수 + 누적 */
+export interface ReviewKpi {
+  latestDate: string | null; // YYYY-MM-DD
+  latestN: number;
+  total: number;
+}
+
+export async function getReviewKpi(): Promise<ReviewKpi> {
+  try {
+    const supabase = createAdminClient();
+    const { data: latest } = await supabase
+      .from("bid_rec_scores")
+      .select("open_result_date")
+      .order("open_result_date", { ascending: false })
+      .limit(1);
+    const latestDate = latest?.[0]?.open_result_date?.slice(0, 10) ?? null;
+    const [{ count: total }, { count: latestN }] = await Promise.all([
+      supabase.from("bid_rec_scores").select("*", { count: "exact", head: true }),
+      latestDate
+        ? supabase
+            .from("bid_rec_scores")
+            .select("*", { count: "exact", head: true })
+            .like("open_result_date", `${latestDate}%`)
+        : Promise.resolve({ count: 0 } as { count: number | null }),
+    ]);
+    return { latestDate, latestN: latestN ?? 0, total: total ?? 0 };
+  } catch {
+    return { latestDate: null, latestN: 0, total: 0 };
+  }
+}
+
 export async function getReviewData(
   scope: "ours" | "all" = "ours",
   dateFilter: string = "all",

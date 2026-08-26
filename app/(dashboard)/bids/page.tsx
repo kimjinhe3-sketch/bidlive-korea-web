@@ -1,4 +1,5 @@
 import { getBidKpis, getBidListPaged, getRecommendations } from "@/lib/queries/bids";
+import { getReviewKpi } from "@/lib/queries/review";
 import { BidKpiGrid } from "@/components/bids/bid-kpi-grid";
 import { BidSourceTabs } from "@/components/bids/bid-source-tabs";
 import { BidTable } from "@/components/bids/bid-table";
@@ -73,9 +74,10 @@ export default async function BidsPage({ searchParams }: PageProps) {
   const pageSize = clampInt(sp.size, 50, [50, 100, 200, 500]);
   const pageNum = Math.max(1, parseInt(sp.page ?? "1", 10) || 1);
 
-  const [kpis, listResult] = await Promise.all([
+  const [kpis, listResult, reviewKpi] = await Promise.all([
     getBidKpis(),
     getBidListPaged(filter, pageSize, pageNum),
+    getReviewKpi(),
   ]);
   const { rows, total } = listResult;
 
@@ -100,8 +102,8 @@ export default async function BidsPage({ searchParams }: PageProps) {
         </div>
       </div>
 
-      {/* 2. KPI — TODAY 거대 + 4 그룹 누적 (클릭 → 필터 리스트) */}
-      <BidKpiGrid kpis={kpis} today={todayKst} />
+      {/* 2. KPI — TODAY 거대 + 4 그룹 누적 + AI 리뷰보드 (클릭 → 필터 리스트/리뷰보드) */}
+      <BidKpiGrid kpis={kpis} today={todayKst} review={reviewKpi} />
 
       {/* 3. 필터 툴바 — 표 위 한 줄 */}
       <BidFilterToolbar />

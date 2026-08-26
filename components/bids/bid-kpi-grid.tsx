@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { Building2, Briefcase, Globe2, Sparkles, ArrowUpRight } from "lucide-react";
+import { Building2, Briefcase, Globe2, Sparkles, ArrowUpRight, Bot } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { BidKpiSummary, BidKpiBreakdown } from "@/lib/queries/bids";
+import type { ReviewKpi } from "@/lib/queries/review";
 import type { SourceGroup } from "@/types/domain";
 
 /**
@@ -13,11 +14,19 @@ import type { SourceGroup } from "@/types/domain";
  * - 그룹 카드(나라장터/LH/KEPCO/기타) → /bids?group=X  (그룹 누적 리스트)
  * - 폰트: TODAY 5rem → 3.25rem, 그룹 3xl → 2xl
  */
-export function BidKpiGrid({ kpis, today }: { kpis: BidKpiSummary; today: string }) {
+export function BidKpiGrid({
+  kpis,
+  today,
+  review,
+}: {
+  kpis: BidKpiSummary;
+  today: string;
+  review?: ReviewKpi;
+}) {
   return (
     <div className="grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] gap-3">
       <TodayCard count={kpis.todayTotal} total={kpis.total} today={today} />
-      <GroupGrid items={kpis.byGroup} />
+      <GroupGrid items={kpis.byGroup} review={review} />
     </div>
   );
 }
@@ -73,13 +82,53 @@ function TodayCard({
   );
 }
 
-function GroupGrid({ items }: { items: BidKpiBreakdown[] }) {
+function GroupGrid({ items, review }: { items: BidKpiBreakdown[]; review?: ReviewKpi }) {
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <div className={cn("grid grid-cols-2 gap-3", review ? "lg:grid-cols-5" : "lg:grid-cols-4")}>
       {items.map((it) => (
         <GroupCard key={it.group} item={it} />
       ))}
+      {review && <ReviewCard review={review} />}
     </div>
+  );
+}
+
+/** 제일 우측 — AI 리뷰보드 진입 카드 (최신 개찰일 채점 건수, 클릭 → /review) */
+function ReviewCard({ review }: { review: ReviewKpi }) {
+  return (
+    <Link
+      href="/review"
+      className="group relative overflow-hidden rounded-lg border border-kt-red/30 bg-kt-red/[0.03] p-4 hover:shadow-sm hover:border-kt-red/60 transition-all"
+      title="AI 추천 투찰가 vs 실제 개찰 결과 성적표로 이동"
+    >
+      <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-kt-red" />
+      <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider uppercase text-kt-red">
+        <Bot className="h-3 w-3" />
+        AI 리뷰보드
+        <ArrowUpRight className="ml-auto h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+      </div>
+      <div className="mt-1 flex items-baseline gap-1">
+        <span
+          className={cn(
+            "text-2xl font-black num leading-none tracking-tight",
+            review.latestN === 0 ? "text-kt-light-gray" : "text-kt-black",
+          )}
+        >
+          {review.latestN.toLocaleString("ko-KR")}
+        </span>
+        <span className="text-xs font-bold text-kt-dark-gray">건 채점</span>
+      </div>
+      <div className="mt-1 text-[11px] text-kt-light-gray">
+        {review.latestDate ? (
+          <>
+            <span className="num">{review.latestDate.slice(5)}</span> 개찰분
+            <span className="text-kt-light-gray/80"> · 누적 <span className="num">{review.total.toLocaleString("ko-KR")}</span></span>
+          </>
+        ) : (
+          "채점 대기"
+        )}
+      </div>
+    </Link>
   );
 }
 
