@@ -83,11 +83,17 @@ export interface ReviewData {
   scope: "ours" | "all";
   /** 상세 테이블 개찰일 필터 — "all" 또는 "YYYY-MM-DD" */
   dateFilter: string;
+  /** 상세 테이블 판정(등급) 필터 — "all" 또는 TierKey */
+  tierFilter: string;
+  /** 날짜 필터 적용분의 등급별 건수 (판정 칩 라벨용) */
+  tierCounts: Record<TierKey, number>;
   /** 개찰일 칩 목록 (전체 이력, 최신순) */
   dates: { date: string; n: number }[];
   /** 필터 전 전체 채점 수 (scope 무관) */
   totalAll: number;
-  today: ScoreSummary | null;
+  /** 최신 개찰일 요약 — 개찰은 전일분이 당일 저녁 채점되므로 "오늘"이 아닌 최신 개찰일 기준 */
+  latestDay: ScoreSummary | null;
+  latestDate: string | null;
   d7: ScoreSummary | null;
   d30: ScoreSummary | null;
   daily: DailyScore[];       // 최근 30일 일별
@@ -125,10 +131,6 @@ function summarize(rows: RecScore[]): ScoreSummary | null {
     underPct: pct(rows.filter((r) => r.outcome === "under").length),
     medDiff: Math.round(med * 100) / 100,
   };
-}
-
-function kstToday(): string {
-  return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
 /** ISO 주 시작일(월요일) */
@@ -177,6 +179,7 @@ export async function getReviewKpi(): Promise<ReviewKpi> {
 export async function getReviewData(
   scope: "ours" | "all" = "ours",
   dateFilter: string = "latest", // "latest"=최신 개찰일(기본) / "all" / "YYYY-MM-DD"
+  tierFilter: string = "all",    // "all" 또는 TierKey — 판정 필터
 ): Promise<ReviewData> {
   const supabase = createAdminClient();
   const { data, error } = await supabase
@@ -192,7 +195,6 @@ export async function getReviewData(
   const rows = scope === "ours"
     ? allRows.filter((r) => r.grp && r.grp !== "-")
     : allRows;
-  const today = kstToday();
   const since = (days: number) =>
     new Date(Date.now() + 9 * 3600 * 1000 - days * 86400000).toISOString().slice(0, 10);
 
@@ -248,16 +250,28 @@ export async function getReviewData(
     .map(([date, n]) => ({ date, n }));
   // "latest" = 가장 최근 개찰일(전일 평가분)이 기본값
   const resolved = dateFilter === "latest" ? (dates[0]?.date ?? "all") : dateFilter;
-  const filtered = resolved !== "all"
+  const dateFiltered = resolved !== "all"
     ? rows.filter((r) => (r.open_result_date ?? "").startsWith(resolved))
     : rows;
+  // 판정(등급) 칩 건수는 날짜 필터 기준 — 판정 필터는 그 위에 얹힘
+  const tierCounts = {} as Record<TierKey, number>;
+  for (const k of [...TIERS.map((t) => t.key), "far"] as TierKey[]) tierCounts[k] = 0;
+  for (const r of dateFiltered) tierCounts[tierOf(Number(r.diff))]++;
+  const filtered = tierFilter !== "all"
+    ? dateFiltered.filter((r) => tierOf(Number(r.diff)) === tierFilter)
+    : dateFiltered;
 
   return {
     scope,
     dateFilter: resolved,
+    tierFilter,
+    tierCounts,
     dates,
     totalAll: allRows.length,
-    today: summarize(rows.filter((r) => (r.open_result_date ?? "").startsWith(today))),
+    latestDay: dates[0]
+      ? summarize(rows.filter((r) => (r.open_result_date ?? "").startsWith(dates[0].date)))
+      : null,
+    latestDate: dates[0]?.date ?? null,
     d7: summarize(byDate(since(7))),
     d30: summarize(byDate(since(30))),
     daily,

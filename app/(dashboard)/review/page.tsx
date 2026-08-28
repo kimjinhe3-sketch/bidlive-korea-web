@@ -93,11 +93,14 @@ export default async function ReviewPage({
   const scope = sp.scope === "all" ? "all" : "ours";
   const dateFilter =
     sp.date === "all" ? "all" : /^\d{4}-\d{2}-\d{2}$/.test(sp.date ?? "") ? sp.date! : "latest";
-  const d = await getReviewData(scope, dateFilter);
-  const hrefFor = (date: string) => {
+  const tierFilter = (ALL_TIER_KEYS as string[]).includes(sp.tier ?? "") ? sp.tier! : "all";
+  const d = await getReviewData(scope, dateFilter, tierFilter);
+  const hrefFor = (over: { date?: string; tier?: string }) => {
     const q = new URLSearchParams();
     if (scope === "all") q.set("scope", "all");
-    q.set("date", date); // "all" 도 명시 — 기본값(파라미터 없음)은 최신 개찰일
+    q.set("date", over.date ?? d.dateFilter); // "all" 도 명시 — 기본값(파라미터 없음)은 최신 개찰일
+    const t = over.tier ?? tierFilter;
+    if (t !== "all") q.set("tier", t);
     return `/review?${q.toString()}`;
   };
 
@@ -148,9 +151,12 @@ export default async function ReviewPage({
         </div>
       ) : (
         <>
-          {/* 요약 카드 3장 */}
+          {/* 요약 카드 3장 — 개찰은 전일분이 당일 저녁 채점되므로 첫 카드는 최신 개찰일 */}
           <div className="grid gap-3 sm:grid-cols-3">
-            <SummaryCard title="오늘" s={d.today} />
+            <SummaryCard
+              title={d.latestDate ? `최신 개찰 (${d.latestDate.slice(5)})` : "최신 개찰"}
+              s={d.latestDay}
+            />
             <SummaryCard title="최근 7일" s={d.d7} highlight />
             <SummaryCard title="최근 30일" s={d.d30} />
           </div>
@@ -188,7 +194,7 @@ export default async function ReviewPage({
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5 text-[11.5px] font-bold">
                 <Link
-                  href={hrefFor("all")}
+                  href={hrefFor({ date: "all" })}
                   className={cn(
                     "rounded-md border px-2 py-0.5",
                     d.dateFilter === "all"
@@ -201,7 +207,7 @@ export default async function ReviewPage({
                 {d.dates.slice(0, 20).map((dt) => (
                   <Link
                     key={dt.date}
-                    href={hrefFor(dt.date)}
+                    href={hrefFor({ date: dt.date })}
                     className={cn(
                       "rounded-md border px-2 py-0.5 num",
                       d.dateFilter === dt.date
@@ -210,6 +216,44 @@ export default async function ReviewPage({
                     )}
                   >
                     {dt.date.slice(5)} <span className="font-normal opacity-70">{dt.n}</span>
+                  </Link>
+                ))}
+              </div>
+              {/* 판정(등급) 필터 칩 — 날짜 필터 위에 얹힘 */}
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11.5px] font-bold">
+                <span className="text-[10.5px] font-bold uppercase text-kt-light-gray">판정</span>
+                <Link
+                  href={hrefFor({ tier: "all" })}
+                  className={cn(
+                    "rounded-md border px-2 py-0.5",
+                    tierFilter === "all"
+                      ? "border-kt-black bg-kt-black text-white"
+                      : "border-kt-light-gray/40 text-kt-dark-gray hover:border-kt-black/40 hover:text-kt-black",
+                  )}
+                >
+                  전체
+                </Link>
+                {ALL_TIER_KEYS.map((k) => (
+                  <Link
+                    key={k}
+                    href={hrefFor({ tier: k })}
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-md border px-2 py-0.5",
+                      tierFilter === k
+                        ? "text-white"
+                        : "text-kt-dark-gray hover:text-kt-black",
+                    )}
+                    style={
+                      tierFilter === k
+                        ? { backgroundColor: TIER_COLORS[k], borderColor: TIER_COLORS[k] }
+                        : { borderColor: "#d5d9e0" }
+                    }
+                  >
+                    <span
+                      className="inline-block h-1.5 w-1.5 rounded-sm"
+                      style={{ backgroundColor: tierFilter === k ? "#fff" : TIER_COLORS[k] }}
+                    />
+                    {TIER_LABELS[k]} <span className="font-normal opacity-70 num">{d.tierCounts[k]}</span>
                   </Link>
                 ))}
               </div>
@@ -432,14 +476,23 @@ function TrendTable({
 function TierBadge({ diff, invalid }: { diff: number; invalid: boolean }) {
   const k = tierOf(diff);
   const c = TIER_COLORS[k];
+  // 적중·적중권은 북극성 지표 — 꽉 찬 배지 + 글로우로 확 튀게
+  const hot = k === "exact" || k === "near";
   return (
     <span className="inline-flex items-center gap-1">
       <span
-        className="inline-block rounded-md border px-1.5 py-0.5 text-[10.5px] font-bold"
-        style={{ color: c, backgroundColor: `${c}1a`, borderColor: `${c}55` }}
+        className={cn(
+          "inline-block rounded-md border px-1.5 py-0.5 text-[10.5px] font-bold",
+          hot && "shadow-[0_0_8px_rgba(5,150,105,0.55)]",
+        )}
+        style={
+          hot
+            ? { color: "#fff", backgroundColor: c, borderColor: c }
+            : { color: c, backgroundColor: `${c}1a`, borderColor: `${c}55` }
+        }
         title={`오차 ${TIER_ZONES[k]}`}
       >
-        {TIER_LABELS[k]}
+        {k === "exact" ? "★ 적중" : TIER_LABELS[k]}
       </span>
       {invalid && (
         <span
